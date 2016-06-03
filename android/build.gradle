@@ -120,5 +120,5 @@ idea {
     }
 }
 dependencies {
-    compile files('libs/gdx-liquidfun.jar')
+    compile files('libs/gdx-liquidfun-modified.jar')
 }

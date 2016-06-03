@@ -1,5 +1,6 @@
 package com.kavanbickerstaff.floodgate;
 
+import com.badlogic.ashley.core.Engine;
 import com.badlogic.gdx.ApplicationAdapter;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.InputProcessor;
@@ -20,6 +21,9 @@ import com.badlogic.gdx.physics.box2d.CircleShape;
 import com.badlogic.gdx.physics.box2d.FixtureDef;
 import com.badlogic.gdx.physics.box2d.PolygonShape;
 import com.badlogic.gdx.physics.box2d.World;
+import com.badlogic.gdx.utils.viewport.FitViewport;
+import com.uwsoft.editor.renderer.SceneLoader;
+import com.uwsoft.editor.renderer.systems.PhysicsSystem;
 
 import finnstr.libgdx.liquidfun.ParticleDebugRenderer;
 import finnstr.libgdx.liquidfun.ParticleDef;
@@ -28,26 +32,11 @@ import finnstr.libgdx.liquidfun.ParticleSystem;
 import finnstr.libgdx.liquidfun.ParticleSystemDef;
 
 public class Floodgate extends ApplicationAdapter implements InputProcessor {
-//	SpriteBatch batch;
-//	Texture img;
-//
-//	@Override
-//	public void create () {
-//		batch = new SpriteBatch();
-//		img = new Texture("badlogic.jpg");
-//	}
-//
-//	@Override
-//	public void render () {
-//		Gdx.gl.glClearColor(1, 0, 0, 1);
-//		Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
-//		batch.begin();
-//		batch.draw(img, 0, 0);
-//		batch.end();
-//	}
+
     private static final float BOX_TO_WORLD = 120.0f;
     private static final float WORLD_TO_BOX = 1f / BOX_TO_WORLD;
 
+    /*
     private OrthographicCamera camera;
     private SpriteBatch batch;
     private Texture texture;
@@ -250,6 +239,32 @@ public class Floodgate extends ApplicationAdapter implements InputProcessor {
         body.createFixture(fixDef);
         updateLog();
     }
+    */
+
+    private SceneLoader sceneLoader;
+    private Engine engine;
+    private World world;
+
+    @Override
+    public void create() {
+        Gdx.input.setInputProcessor(this);
+
+        FitViewport viewport = new FitViewport(800, 480);
+        sceneLoader = new SceneLoader();
+        sceneLoader.loadScene("MainScene", viewport);
+
+        engine = sceneLoader.getEngine();
+        world = sceneLoader.world;
+        Gdx.app.log("ENTITY_COUNT", "" + engine.getEntities().size());
+    }
+
+    @Override
+    public void render() {
+        Gdx.gl.glClearColor(0, 0, 0, 1);
+        Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
+
+        sceneLoader.getEngine().update(Gdx.graphics.getDeltaTime());
+    }
 
     @Override
     public boolean keyDown(int keycode) {
@@ -268,8 +283,8 @@ public class Floodgate extends ApplicationAdapter implements InputProcessor {
 
     @Override
     public boolean touchDown(int screenX, int screenY, int pointer, int button) {
-        createCircleBody(screenX, Gdx.graphics.getHeight() - screenY, MathUtils.random(10, 80));
-        return true;
+        //createCircleBody(screenX, Gdx.graphics.getHeight() - screenY, MathUtils.random(10, 80));
+        return false;
     }
 
     @Override
