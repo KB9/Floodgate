@@ -7,10 +7,6 @@ import com.badlogic.gdx.InputProcessor;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
-import com.badlogic.gdx.graphics.Texture;
-import com.badlogic.gdx.graphics.g2d.Sprite;
-import com.badlogic.gdx.graphics.g2d.SpriteBatch;
-import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Matrix4;
 import com.badlogic.gdx.math.Vector2;
@@ -23,6 +19,7 @@ import com.badlogic.gdx.physics.box2d.PolygonShape;
 import com.badlogic.gdx.physics.box2d.World;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.uwsoft.editor.renderer.SceneLoader;
+import com.uwsoft.editor.renderer.physics.PhysicsBodyLoader;
 import com.uwsoft.editor.renderer.systems.PhysicsSystem;
 
 import finnstr.libgdx.liquidfun.ParticleDebugRenderer;
@@ -33,16 +30,15 @@ import finnstr.libgdx.liquidfun.ParticleSystemDef;
 
 public class Floodgate extends ApplicationAdapter implements InputProcessor {
 
-    private static final float BOX_TO_WORLD = 120.0f;
-    private static final float WORLD_TO_BOX = 1f / BOX_TO_WORLD;
+    private float BOX_TO_WORLD;
+    private float WORLD_TO_BOX;
 
-    /*
     private OrthographicCamera camera;
-    private SpriteBatch batch;
-    private Texture texture;
-    private Sprite sprite;
 
+    private SceneLoader sceneLoader;
+    private FitViewport sceneViewport;
     private World world;
+
     private ParticleSystem particleSystem;
     private ParticleDebugRenderer particleDebugRenderer;
     private Box2DDebugRenderer debugRenderer;
@@ -60,65 +56,46 @@ public class Floodgate extends ApplicationAdapter implements InputProcessor {
         camera.update();
         Gdx.input.setInputProcessor(this);
 
-        batch = new SpriteBatch();
-        texture = new Texture(Gdx.files.internal("badlogic.jpg"));
-        texture.setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear);
-        TextureRegion region = new TextureRegion(texture, 0, 0, 512, 275);
+        sceneViewport = new FitViewport(800, 480);
+        sceneLoader = new SceneLoader();
+        sceneLoader.loadScene("MainScene", sceneViewport);
 
-        sprite = new Sprite(region);
-        sprite.setSize(width, height);
-        sprite.setOrigin(sprite.getWidth() / 2, sprite.getHeight() / 2);
-        sprite.setPosition(0, 0);
+        debugRenderer = new Box2DDebugRenderer();
 
-        createBox2DWorld(width, height);
+        world = sceneLoader.world;
+
+        // Get the world -> Box2D scalar
+        BOX_TO_WORLD = 1f / PhysicsBodyLoader.getScale();
+        // Apply the ratio between screen viewport and scene viewport sizes
+        BOX_TO_WORLD *= (float)Gdx.graphics.getWidth() / sceneViewport.getWorldWidth();
+        // Inverse of scale to get back to world coordinates
+        WORLD_TO_BOX = 1f / BOX_TO_WORLD;
+
         createParticleStuff(width, height);
 
-        // Render stuff
-        debugRenderer = new Box2DDebugRenderer();
+        // Inject modified PhysicsSystem to handle particles
+        Engine engine = sceneLoader.getEngine();
+        engine.removeSystem(engine.getSystem(PhysicsSystem.class));
+        engine.addSystem(new LiquidFunPhysicsSystem(world, particleSystem));
+
         particleDebugRenderer = new ParticleDebugRenderer(new Color(0, 1, 0, 1),
                 particleSystem.getParticleCount());
-
-        // Version
-        Gdx.app.log("LIQUIDFUN_VERSION", particleSystem.getVersionString());
-        updateLog();
     }
 
-    private void createBox2DWorld(float width, float height) {
-        world = new World(new Vector2(0, -9.8f), false);
+    @Override
+    public void render() {
+        Gdx.gl.glClearColor(0, 0, 0, 1);
+        Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
 
-        // Bottom
-        BodyDef bodyDef = new BodyDef();
-        bodyDef.type = BodyDef.BodyType.StaticBody;
-        bodyDef.position.set(width * WORLD_TO_BOX / 2f, height * (2f / 100f) * WORLD_TO_BOX / 2f);
-        //bodyDef.angle = (float)Math.toRadians(-30);
-        Body ground = world.createBody(bodyDef);
+        sceneLoader.getEngine().update(Gdx.graphics.getDeltaTime());
 
-        PolygonShape shape = new PolygonShape();
-        shape.setAsBox(width * WORLD_TO_BOX / 2f, height * (2f / 100f) * WORLD_TO_BOX / 2f);
+        Matrix4 cameraCombined = camera.combined.cpy();
+        cameraCombined.scale(BOX_TO_WORLD, BOX_TO_WORLD, 1);
 
-        FixtureDef fixtureDef = new FixtureDef();
-        fixtureDef.friction = 0.2f;
-        fixtureDef.shape = shape;
-        ground.createFixture(fixtureDef);
+        debugRenderer.render(world, cameraCombined);
+        particleDebugRenderer.render(particleSystem, BOX_TO_WORLD, cameraCombined);
 
-        shape.dispose();
-
-        // Walls
-        BodyDef bodyDef1 = new BodyDef();
-        bodyDef1.type = BodyDef.BodyType.StaticBody;
-        bodyDef1.position.set(width * (2f / 100f) * WORLD_TO_BOX / 2f, height * WORLD_TO_BOX / 2);
-        Body left = world.createBody(bodyDef1);
-
-        bodyDef1.position.set(width * WORLD_TO_BOX - width * (2f / 100f) * WORLD_TO_BOX / 2f, height * WORLD_TO_BOX / 2);
-        Body right = world.createBody(bodyDef1);
-
-        shape = new PolygonShape();
-        shape.setAsBox(width * (2f / 100f) * WORLD_TO_BOX / 2f, height * WORLD_TO_BOX / 2);
-        fixtureDef.shape = shape;
-
-        left.createFixture(fixtureDef);
-        right.createFixture(fixtureDef);
-        shape.dispose();
+        Gdx.app.log("FPS", Gdx.graphics.getFramesPerSecond() + " frames/sec");
     }
 
     private void createParticleStuff(float width, float height) {
@@ -164,63 +141,6 @@ public class Floodgate extends ApplicationAdapter implements InputProcessor {
         particleGroupDef2.linearVelocity.set(new Vector2(0, -10f));
     }
 
-    @Override
-    public void render() {
-        Gdx.gl.glClearColor(0, 0, 0, 1);
-        Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
-
-        world.step(Gdx.graphics.getDeltaTime(), 10, 6,
-                particleSystem.calculateReasonableParticleIterations(Gdx.graphics.getDeltaTime()));
-
-//        batch.setProjectionMatrix(camera.combined);
-//        batch.begin();
-//        sprite.draw(batch);
-//        batch.end();
-
-        // Get combined matrix, scale down to Box2D size
-        Matrix4 cameraCombined = camera.combined.cpy();
-        cameraCombined.scale(BOX_TO_WORLD, BOX_TO_WORLD, 1);
-
-        // Render particles then render Box2D world
-        particleDebugRenderer.render(particleSystem, BOX_TO_WORLD, cameraCombined);
-        debugRenderer.render(world, cameraCombined);
-    }
-
-    @Override
-    public void dispose() {
-        batch.dispose();
-        texture.dispose();
-        particleGroupDef1.shape.dispose();
-        world.dispose();
-        debugRenderer.dispose();
-    }
-
-    public void createParticles1(float pX, float pY) {
-        particleGroupDef1.position.set(pX * WORLD_TO_BOX, pY * WORLD_TO_BOX);
-        particleSystem.createParticleGroup(particleGroupDef1);
-        updateParticleCount();
-        updateLog();
-    }
-
-    private void createParticles2(float pX, float pY) {
-        particleGroupDef2.position.set(pX * WORLD_TO_BOX, pY * WORLD_TO_BOX);
-        particleSystem.createParticleGroup(particleGroupDef2);
-        updateParticleCount();
-        updateLog();
-    }
-
-    private void updateParticleCount() {
-        if(particleSystem.getParticleCount() > particleDebugRenderer.getMaxParticleNumber()) {
-            particleDebugRenderer.setMaxParticleNumber(particleSystem.getParticleCount() + 1000);
-        }
-    }
-
-    public void updateLog() {
-        //Here we log the total particle count and the f/s
-        Gdx.app.log("LIQUIDFUN", "Total particles: " + particleSystem.getParticleCount() +
-                " FPS: " + Gdx.graphics.getFramesPerSecond());
-    }
-
     public void createCircleBody(float pX, float pY, float pRadius) {
         BodyDef bodyDef = new BodyDef();
         bodyDef.type = BodyDef.BodyType.DynamicBody;
@@ -231,39 +151,19 @@ public class Floodgate extends ApplicationAdapter implements InputProcessor {
         shape.setRadius(pRadius * WORLD_TO_BOX);
 
         FixtureDef fixDef = new FixtureDef();
-        fixDef.density = 0.5f;
-        fixDef.friction = 0.2f;
+        fixDef.density = 1.0f;
+        fixDef.friction = 0.5f;
         fixDef.shape = shape;
-        fixDef.restitution = 0.3f;
+        fixDef.restitution = 0.5f;
 
         body.createFixture(fixDef);
-        updateLog();
-    }
-    */
-
-    private SceneLoader sceneLoader;
-    private Engine engine;
-    private World world;
-
-    @Override
-    public void create() {
-        Gdx.input.setInputProcessor(this);
-
-        FitViewport viewport = new FitViewport(800, 480);
-        sceneLoader = new SceneLoader();
-        sceneLoader.loadScene("MainScene", viewport);
-
-        engine = sceneLoader.getEngine();
-        world = sceneLoader.world;
-        Gdx.app.log("ENTITY_COUNT", "" + engine.getEntities().size());
     }
 
     @Override
-    public void render() {
-        Gdx.gl.glClearColor(0, 0, 0, 1);
-        Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
-
-        sceneLoader.getEngine().update(Gdx.graphics.getDeltaTime());
+    public void dispose() {
+        particleGroupDef1.shape.dispose();
+        world.dispose();
+        debugRenderer.dispose();
     }
 
     @Override
@@ -283,7 +183,7 @@ public class Floodgate extends ApplicationAdapter implements InputProcessor {
 
     @Override
     public boolean touchDown(int screenX, int screenY, int pointer, int button) {
-        //createCircleBody(screenX, Gdx.graphics.getHeight() - screenY, MathUtils.random(10, 80));
+        createCircleBody(screenX, Gdx.graphics.getHeight() - screenY, MathUtils.random(10, 80));
         return false;
     }
 
