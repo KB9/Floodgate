@@ -6,9 +6,12 @@ import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.InputProcessor;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
-import com.badlogic.gdx.graphics.OrthographicCamera;
+import com.badlogic.gdx.graphics.Pixmap;
+import com.badlogic.gdx.graphics.Texture;
+import com.badlogic.gdx.graphics.g2d.SpriteBatch;
+import com.badlogic.gdx.graphics.glutils.FrameBuffer;
+import com.badlogic.gdx.graphics.glutils.ShaderProgram;
 import com.badlogic.gdx.math.MathUtils;
-import com.badlogic.gdx.math.Matrix4;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.physics.box2d.Body;
 import com.badlogic.gdx.physics.box2d.BodyDef;
@@ -33,8 +36,6 @@ public class Floodgate extends ApplicationAdapter implements InputProcessor {
     private float BOX_TO_WORLD;
     private float WORLD_TO_BOX;
 
-    private OrthographicCamera camera;
-
     private SceneLoader sceneLoader;
     private FitViewport sceneViewport;
     private World world;
@@ -42,36 +43,45 @@ public class Floodgate extends ApplicationAdapter implements InputProcessor {
     private ParticleSystem particleSystem;
     private ParticleDebugRenderer particleDebugRenderer;
     private Box2DDebugRenderer debugRenderer;
+    private SpriteBatch particleBatch;
+    private Texture particleTexture;
+    private ShaderProgram waterShader;
+    private FrameBuffer fbo;
 
     private ParticleGroupDef particleGroupDef1;
     private ParticleGroupDef particleGroupDef2;
 
+    private int lastX, lastY;
+    private float scrollSpeed;
+
     @Override
     public void create() {
-        float width = Gdx.graphics.getWidth();
-        float height = Gdx.graphics.getHeight();
-
-        camera = new OrthographicCamera(width, height);
-        camera.position.set(width / 2, height / 2, 0);
-        camera.update();
         Gdx.input.setInputProcessor(this);
 
         sceneViewport = new FitViewport(800, 480);
         sceneLoader = new SceneLoader();
         sceneLoader.loadScene("MainScene", sceneViewport);
 
+        scrollSpeed = sceneViewport.getWorldWidth() / (float)Gdx.graphics.getWidth();
+
         debugRenderer = new Box2DDebugRenderer();
+        particleBatch = new SpriteBatch();
+        particleTexture = new Texture(Gdx.files.internal("water_particle_block.png"));
+        String vertexShader = Gdx.files.internal("water_shader.vert").readString();
+        String fragmentShader = Gdx.files.internal("water_shader.frag").readString();
+        waterShader = new ShaderProgram(vertexShader, fragmentShader);
+        Gdx.app.log("SHADER", waterShader.getLog());
 
         world = sceneLoader.world;
 
         // Get the world -> Box2D scalar
         BOX_TO_WORLD = 1f / PhysicsBodyLoader.getScale();
         // Apply the ratio between screen viewport and scene viewport sizes
-        BOX_TO_WORLD *= (float)Gdx.graphics.getWidth() / sceneViewport.getWorldWidth();
+        //BOX_TO_WORLD *= (float)Gdx.graphics.getWidth() / sceneViewport.getWorldWidth();
         // Inverse of scale to get back to world coordinates
         WORLD_TO_BOX = 1f / BOX_TO_WORLD;
 
-        createParticleStuff(width, height);
+        createParticleStuff(800, 480);//(width, height);
 
         // Inject modified PhysicsSystem to handle particles
         Engine engine = sceneLoader.getEngine();
@@ -80,29 +90,53 @@ public class Floodgate extends ApplicationAdapter implements InputProcessor {
 
         particleDebugRenderer = new ParticleDebugRenderer(new Color(0, 1, 0, 1),
                 particleSystem.getParticleCount());
+
+        fbo = new FrameBuffer(Pixmap.Format.RGBA8888,
+                Gdx.graphics.getWidth(), Gdx.graphics.getHeight(), false);
     }
 
     @Override
     public void render() {
+        /////////////////////////////// FBO STUFF ///////////////////////////////
+        fbo.begin();
+
         Gdx.gl.glClearColor(0, 0, 0, 1);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
 
+        particleBatch.begin();
+        for (Vector2 pos : particleSystem.getParticlePositionBuffer()) {
+            particleBatch.draw(particleTexture,
+                    sceneToScreenX((int)(pos.x * BOX_TO_WORLD)) - (particleTexture.getWidth() / 2),
+                    sceneToScreenY(480 - (int)(pos.y * BOX_TO_WORLD)) - (particleTexture.getHeight() / 2)
+            );
+        }
+        particleBatch.end();
+
+        fbo.end(sceneViewport.getScreenX(), sceneViewport.getScreenY(),
+                sceneViewport.getScreenWidth(), sceneViewport.getScreenHeight());
+        /////////////////////////////// FBO STUFF ///////////////////////////////
+
+        Gdx.gl.glClearColor(0, 0, 0, 1);
+        Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
+
+        // TODO: Read more of this source code to improve on rendering times by reducing coordinate calculations.
         sceneLoader.getEngine().update(Gdx.graphics.getDeltaTime());
 
-        Matrix4 cameraCombined = camera.combined.cpy();
-        cameraCombined.scale(BOX_TO_WORLD, BOX_TO_WORLD, 1);
+        SpriteBatch fboBatch = new SpriteBatch();
+        fboBatch.setShader(waterShader);
+        fboBatch.begin();
+        fboBatch.draw(fbo.getColorBufferTexture(), 0, 0);
+        fboBatch.end();
 
-        debugRenderer.render(world, cameraCombined);
-        particleDebugRenderer.render(particleSystem, BOX_TO_WORLD, cameraCombined);
-
-        Gdx.app.log("FPS", Gdx.graphics.getFramesPerSecond() + " frames/sec");
+        debugRenderer.render(world, sceneViewport.getCamera().combined);
+        Gdx.app.log("FPS", Gdx.graphics.getFramesPerSecond() + "Hz (" + particleSystem.getParticleCount() + " particles)");
     }
 
     private void createParticleStuff(float width, float height) {
         // Create new ParticleSystem
         // Set radius of each particle to 6/120m (5cm)
         ParticleSystemDef particleSystemDef = new ParticleSystemDef();
-        particleSystemDef.radius = 6f * WORLD_TO_BOX;
+        particleSystemDef.radius = 7.5f * WORLD_TO_BOX;
         particleSystemDef.dampingStrength = 0.2f;
 
         particleSystem = new ParticleSystem(world, particleSystemDef);
@@ -183,8 +217,13 @@ public class Floodgate extends ApplicationAdapter implements InputProcessor {
 
     @Override
     public boolean touchDown(int screenX, int screenY, int pointer, int button) {
-        createCircleBody(screenX, Gdx.graphics.getHeight() - screenY, MathUtils.random(10, 80));
-        return false;
+        lastX = screenX;
+        lastY = screenY;
+
+        createCircleBody(screenToSceneX(screenX),
+                sceneViewport.getWorldHeight() - screenToSceneY(screenY),
+                MathUtils.random(10, 80));
+        return true;
     }
 
     @Override
@@ -194,7 +233,14 @@ public class Floodgate extends ApplicationAdapter implements InputProcessor {
 
     @Override
     public boolean touchDragged(int screenX, int screenY, int pointer) {
-        return false;
+        sceneViewport.getCamera().position.add(
+                (lastX - screenX) * scrollSpeed,
+                (screenY - lastY) * scrollSpeed,
+                0);
+
+        lastX = screenX;
+        lastY = screenY;
+        return true;
     }
 
     @Override
@@ -205,5 +251,27 @@ public class Floodgate extends ApplicationAdapter implements InputProcessor {
     @Override
     public boolean scrolled(int amount) {
         return false;
+    }
+
+    public int screenToSceneX(int x) {
+        int newX = (int)(((float)x / (float)Gdx.graphics.getWidth()) * sceneViewport.getWorldWidth());
+        newX += sceneViewport.getCamera().position.x - (sceneViewport.getWorldWidth() / 2f);
+        return newX;
+    }
+
+    public int screenToSceneY(int y) {
+        int newY = (int)(((float)y / (float)Gdx.graphics.getHeight()) * sceneViewport.getWorldHeight());
+        newY -= sceneViewport.getCamera().position.y - (sceneViewport.getWorldHeight() / 2f);
+        return newY;
+    }
+
+    public int sceneToScreenX(int x) {
+        x -= sceneViewport.getCamera().position.x - (sceneViewport.getWorldWidth() / 2f);
+        return (int)(((float)x / sceneViewport.getWorldWidth()) * (float)Gdx.graphics.getWidth());
+    }
+
+    public int sceneToScreenY(int y) {
+        y += sceneViewport.getCamera().position.y - (sceneViewport.getWorldHeight() / 2f);
+        return (int)(((float)y / sceneViewport.getWorldHeight()) * (float)Gdx.graphics.getHeight());
     }
 }
