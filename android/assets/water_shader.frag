@@ -11,6 +11,10 @@ void main() {
     if (texture2D(u_texture, v_texCoord).rgb == vec3(0, 0, 0)) {
         discard;
     } else {
-        gl_FragColor = vec4(0, 0, 1, 0.5);
+        if (texture2D(u_texture, v_texCoord).r >= 0.25) {
+            gl_FragColor = vec4(0, 0, 1, 0.5);
+        } else {
+            gl_FragColor = vec4(1, 1, 1, 0.5);
+        }
     }
 }
