@@ -1,18 +1,18 @@
-package com.kavanbickerstaff.floodgate;
+package com.kavanbickerstaff.floodgate.systems;
 
 import com.badlogic.gdx.physics.box2d.World;
 import com.uwsoft.editor.renderer.systems.PhysicsSystem;
 
 import finnstr.libgdx.liquidfun.ParticleSystem;
 
-public class LiquidFunPhysicsSystem extends PhysicsSystem {
+public class CompatibilityPhysicsSystem extends PhysicsSystem {
 
     private World world;
     private boolean isPhysicsOn = true;
 
     private ParticleSystem particleSystem;
 
-    public LiquidFunPhysicsSystem(World world, ParticleSystem particleSystem) {
+    public CompatibilityPhysicsSystem(World world, ParticleSystem particleSystem) {
         super(world);
         this.world = world;
         this.particleSystem = particleSystem;

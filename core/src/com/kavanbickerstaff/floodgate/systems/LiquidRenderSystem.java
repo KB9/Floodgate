@@ -1,11 +1,10 @@
-package com.kavanbickerstaff.floodgate;
+package com.kavanbickerstaff.floodgate.systems;
 
 import com.badlogic.ashley.core.ComponentMapper;
 import com.badlogic.ashley.core.Entity;
 import com.badlogic.ashley.core.Family;
 import com.badlogic.ashley.systems.IteratingSystem;
 import com.badlogic.gdx.Gdx;
-import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
@@ -13,6 +12,7 @@ import com.badlogic.gdx.graphics.glutils.FrameBuffer;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.viewport.Viewport;
+import com.kavanbickerstaff.floodgate.ViewportUtils;
 import com.kavanbickerstaff.floodgate.components.LiquidComponent;
 import com.uwsoft.editor.renderer.physics.PhysicsBodyLoader;
 
