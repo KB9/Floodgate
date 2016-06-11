@@ -4,11 +4,19 @@ import com.badlogic.ashley.core.Component;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.glutils.ShaderProgram;
 
-import finnstr.libgdx.liquidfun.ParticleSystem;
+import finnstr.libgdx.liquidfun.ParticleDef;
+import finnstr.libgdx.liquidfun.ParticleGroupDef;
 
 public class LiquidComponent implements Component {
 
     public Texture particleTexture;
     public ShaderProgram shader;
-    public ParticleSystem particleSystem;
+
+    public ParticleGroupDef particleGroupDef;
+    public ParticleDef particleDef;
+    public boolean isGroup;
+
+    public LiquidComponent(boolean isGroup) {
+        this.isGroup = isGroup;
+    }
 }
