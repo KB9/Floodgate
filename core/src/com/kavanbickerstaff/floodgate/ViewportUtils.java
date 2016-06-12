@@ -44,7 +44,10 @@ public class ViewportUtils {
      * @return The viewport y-coordinate in world space.
      */
     public static int viewportToWorldY(Viewport viewport, int y) {
-        return (int)(y - (viewport.getCamera().position.y - (viewport.getWorldHeight() / 2f)));
+        // NOTE: This used to be y + ..., but that seemed to be incorrect
+        // Then why does the other calculation work when it's a + as well?
+        // TODO: Work on this math...
+        return (int)(y + (viewport.getCamera().position.y - (viewport.getWorldHeight() / 2f)));
     }
 
     /**

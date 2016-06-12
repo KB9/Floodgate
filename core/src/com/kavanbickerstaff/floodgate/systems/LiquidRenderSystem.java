@@ -48,7 +48,7 @@ public class LiquidRenderSystem extends IteratingSystem implements EntityListene
     @Override
     public void addedToEngine(Engine engine) {
         super.addedToEngine(engine);
-        engine.addEntityListener(this);
+        engine.addEntityListener(getFamily(), this);
     }
 
     @Override
