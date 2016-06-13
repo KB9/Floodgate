@@ -20,7 +20,7 @@ import com.badlogic.gdx.physics.box2d.FixtureDef;
 import com.badlogic.gdx.physics.box2d.PolygonShape;
 import com.badlogic.gdx.physics.box2d.World;
 import com.badlogic.gdx.utils.Array;
-import com.badlogic.gdx.utils.viewport.FitViewport;
+import com.badlogic.gdx.utils.viewport.StretchViewport;
 import com.kavanbickerstaff.floodgate.components.LiquidComponent;
 import com.kavanbickerstaff.floodgate.components.InventoryComponent;
 import com.kavanbickerstaff.floodgate.systems.CompatibilityPhysicsSystem;
@@ -28,7 +28,6 @@ import com.kavanbickerstaff.floodgate.systems.InventorySystem;
 import com.kavanbickerstaff.floodgate.systems.LiquidRenderSystem;
 import com.uwsoft.editor.renderer.SceneLoader;
 import com.uwsoft.editor.renderer.components.MainItemComponent;
-import com.uwsoft.editor.renderer.components.TransformComponent;
 import com.uwsoft.editor.renderer.components.physics.PhysicsBodyComponent;
 import com.uwsoft.editor.renderer.physics.PhysicsBodyLoader;
 import com.uwsoft.editor.renderer.systems.PhysicsSystem;
@@ -48,7 +47,12 @@ public class GameScreen implements Screen, InputProcessor {
     private float BOX_TO_WORLD;
     private float WORLD_TO_BOX;
 
-    private FitViewport viewport;
+    // TODO: Moved from FitViewport to StretchViewport.
+    // Viewport seems to affect SpriteBatch drawing coordinates. For example,
+    // when I use FitViewport(800,480), black bars appear at the sides of the screen.
+    // When attempting to draw to these black bars, the drawing is clamped to the viewport
+    // coordinates.
+    private StretchViewport viewport;
     private SceneLoader sceneLoader;
     private Engine engine;
     private World world;
@@ -67,11 +71,13 @@ public class GameScreen implements Screen, InputProcessor {
 
     private BitmapFont font;
 
+    private Entity heldEntity;
+
     public GameScreen(final Floodgate game) {
         this.game = game;
 
         // Load the scene using the specified viewport size
-        viewport = new FitViewport(800, 480);
+        viewport = new StretchViewport(800, 480);
         sceneLoader = new SceneLoader();
         sceneLoader.loadScene("MainScene", viewport);
 
@@ -247,7 +253,11 @@ public class GameScreen implements Screen, InputProcessor {
 
     private Entity getEntityById(String id) {
         ItemWrapper item = new ItemWrapper(sceneLoader.getRoot());
-        return item.getChild(id).getEntity();
+        ItemWrapper child = item.getChild(id);
+        if (child != null) {
+            return child.getEntity();
+        }
+        return null;
     }
 
     @Override
@@ -265,8 +275,6 @@ public class GameScreen implements Screen, InputProcessor {
         return false;
     }
 
-    private Entity heldEntity;
-
     @Override
     public boolean touchDown(int screenX, int screenY, int pointer, int button) {
         lastX = screenX;
@@ -275,9 +283,10 @@ public class GameScreen implements Screen, InputProcessor {
         if (screenX >= hud.getX() && screenX <= (hud.getX() + hud.getWidth()) &&
                 screenY >= hud.getY() && screenY <= (hud.getY() + hud.getHeight())) {
 
-            int entityId = hud.convertPositionToEntityId(screenX, Gdx.graphics.getHeight() - screenY);
+            int entityId = hud.getItemIdFromPosition(screenX, Gdx.graphics.getHeight() - screenY);
             if (entityId >= 0) {
-                for (Entity e : engine.getEntities()) {
+                // Faster search if iterating on subset rather than iterating over all entities
+                for (Entity e : engine.getSystem(InventorySystem.class).getEntities()) {
                     MainItemComponent main = e.getComponent(MainItemComponent.class);
                     InventoryComponent inventory = e.getComponent(InventoryComponent.class);
                     if (main != null && inventory != null && main.uniqueId == entityId) {

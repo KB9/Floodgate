@@ -8,6 +8,7 @@ import com.badlogic.ashley.core.Family;
 import com.badlogic.ashley.systems.IteratingSystem;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.utils.Array;
+import com.badlogic.gdx.utils.IntMap;
 import com.kavanbickerstaff.floodgate.HUD;
 import com.kavanbickerstaff.floodgate.components.InventoryComponent;
 import com.uwsoft.editor.renderer.components.DimensionsComponent;
@@ -15,6 +16,8 @@ import com.uwsoft.editor.renderer.components.MainItemComponent;
 import com.uwsoft.editor.renderer.components.TextureRegionComponent;
 import com.uwsoft.editor.renderer.components.TransformComponent;
 import com.uwsoft.editor.renderer.components.physics.PhysicsBodyComponent;
+
+import java.util.HashMap;
 
 public class InventorySystem extends IteratingSystem implements EntityListener {
 
@@ -24,6 +27,9 @@ public class InventorySystem extends IteratingSystem implements EntityListener {
     private ComponentMapper<DimensionsComponent> dimensionsM = ComponentMapper.getFor(DimensionsComponent.class);
     private ComponentMapper<TransformComponent> transformM = ComponentMapper.getFor(TransformComponent.class);
 
+    private HUD.Item items[];
+    private IntMap<HUD.Item> itemsByEntityId;
+
     private HUD hud;
 
     @SuppressWarnings("unchecked")
@@ -32,6 +38,9 @@ public class InventorySystem extends IteratingSystem implements EntityListener {
                 TextureRegionComponent.class,
                 PhysicsBodyComponent.class).get());
         this.hud = hud;
+
+        items = new HUD.Item[hud.getSlotCount()];
+        itemsByEntityId = new IntMap<HUD.Item>();
     }
 
     @Override
@@ -50,10 +59,25 @@ public class InventorySystem extends IteratingSystem implements EntityListener {
         main.visible = false;
 
         HUD.Item item = new HUD.Item();
+        item.id = main.uniqueId;
         item.textureRegion = textureRegion.region;
         item.width = dimensions.width * transform.scaleX;
         item.height = dimensions.height * transform.scaleY;
-        hud.addItem(main.uniqueId, item);
+
+        addItem(item.id, item);
+    }
+
+    private void addItem(int key, HUD.Item item) {
+        // Find an empty index to store the item
+        for (int i = 0; i < items.length; i++) {
+            if (items[i] == null) {
+                items[i] = item;
+                break;
+            }
+        }
+
+        itemsByEntityId.put(key, item);
+        hud.update(items);
     }
 
     @Override
@@ -64,7 +88,20 @@ public class InventorySystem extends IteratingSystem implements EntityListener {
         main.visible = true;
         physicsBody.body.setActive(true);
 
-        hud.removeItem(main.uniqueId);
+        removeItem(main.uniqueId);
+    }
+
+    public void removeItem(int key) {
+        // Find the item in the array and remove it
+        HUD.Item item = itemsByEntityId.remove(key);
+        for (int i = 0; i < items.length; i++) {
+            if (items[i] == item) {
+                items[i] = null;
+                break;
+            }
+        }
+
+        hud.update(items);
     }
 
     @Override
@@ -72,7 +109,7 @@ public class InventorySystem extends IteratingSystem implements EntityListener {
         PhysicsBodyComponent physicsBody = physicsM.get(entity);
         MainItemComponent main = mainM.get(entity);
 
-        if (hud.getItem(main.uniqueId) != null && physicsBody.body.isActive()) {
+        if (itemsByEntityId.containsKey(main.uniqueId) && physicsBody.body.isActive()) {
             physicsBody.body.setActive(false);
         }
     }

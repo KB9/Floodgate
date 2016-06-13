@@ -9,13 +9,4 @@ import com.badlogic.ashley.core.Component;
  */
 public class InventoryComponent implements Component {
 
-    /*
-    public boolean store;
-    public float placeX;
-    public float placeY;
-
-    public InventoryComponent(boolean store) {
-        this.store = store;
-    }
-    */
 }

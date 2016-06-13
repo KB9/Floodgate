@@ -5,37 +5,33 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.utils.Array;
 
-import java.util.HashMap;
-
 public class HUD {
 
     public static class Item {
+        public int id;
         public float width, height;
         public TextureRegion textureRegion;
     }
 
     private class Slot {
-        public int index;
         public Item item;
         public int x, y;
         public int size;
     }
 
     private Texture background;
+    private int slots;
     private int x, y;
     private int width, height;
+    private Array<Slot> slotArray;
 
     private SpriteBatch batch;
-
-    private Array<Slot> slotArray;
-    private HashMap<Integer, Item> itemMap;
-    private HashMap<Item, Integer> idMap;
-
     private float alpha;
 
     public HUD(Texture background, int slots,
                int x, int y, int width, int height) {
         this.background = background;
+        this.slots = slots;
         this.x = x;
         this.y = y;
         this.width = width;
@@ -43,14 +39,11 @@ public class HUD {
 
         batch = new SpriteBatch();
         slotArray = new Array<Slot>();
-        itemMap = new HashMap<Integer, Item>();
-        idMap = new HashMap<Item, Integer>();
 
         int currentX = x + 10;
         int currentY = height - (width - 20) - 10;
         for (int i = 0; i < slots; i++) {
             Slot slot = new Slot();
-            slot.index = i;
             slot.x = currentX;
             slot.y = currentY;
             slot.size = width - 20;
@@ -63,30 +56,14 @@ public class HUD {
         alpha = 1;
     }
 
-    public void addItem(int key, Item item) {
-        for (Slot slot : slotArray) {
-            if (slot.item == null) {
-                slot.item = item;
-                itemMap.put(key, item);
-                idMap.put(item, key);
-                break;
-            }
-        }
-    }
+    public void update(Item[] items) {
+        for (int i = 0; i < slotArray.size; i++) {
+            Slot slot = slotArray.get(i);
+            slot.item = null;
 
-    public Item getItem(int key) {
-        return itemMap.get(key);
-    }
-
-    public void removeItem(int key) {
-        Item item = itemMap.remove(key);
-        idMap.remove(item);
-        if (item != null) {
-            for (Slot slot : slotArray) {
-                if (slot.item != null && slot.item.equals(item)) {
-                    slot.item = null;
-                    break;
-                }
+            // Place the items in slot positions identical to items array position
+            if (i < items.length && items[i] != null) {
+                slot.item = items[i];
             }
         }
     }
@@ -113,6 +90,17 @@ public class HUD {
         return slot.size / itemSize;
     }
 
+    public int getItemIdFromPosition(int x, int y) {
+        for (Slot slot : slotArray) {
+            if (x >= slot.x && x <= (slot.x + slot.size) && y >= slot.y && y <= (slot.y + slot.size)) {
+                if (slot.item != null) {
+                    return slot.item.id;
+                }
+            }
+        }
+        return -1;
+    }
+
     public int getX() {
         return x;
     }
@@ -129,17 +117,8 @@ public class HUD {
         return height;
     }
 
-    public int convertPositionToEntityId(int x, int y) {
-        for (Slot slot : slotArray) {
-            if (x >= slot.x && x <= (slot.x + slot.size) && y >= slot.y && y <= (slot.y + slot.size)) {
-                if (idMap.containsKey(slot.item)) {
-                    return idMap.get(slot.item);
-                } else {
-                    break;
-                }
-            }
-        }
-        return -1;
+    public int getSlotCount() {
+        return slots;
     }
 
     public void setAlpha(float alpha) {
