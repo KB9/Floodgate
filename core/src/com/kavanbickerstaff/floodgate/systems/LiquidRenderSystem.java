@@ -9,8 +9,10 @@ import com.badlogic.ashley.systems.IteratingSystem;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.Pixmap;
+import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.FrameBuffer;
+import com.badlogic.gdx.graphics.glutils.ShaderProgram;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.utils.viewport.Viewport;
 import com.kavanbickerstaff.floodgate.ViewportUtils;
@@ -28,15 +30,20 @@ public class LiquidRenderSystem extends IteratingSystem implements EntityListene
     private Viewport targetView;
 
     private ParticleSystem particleSystem;
+    private Texture particleTexture;
+    private ShaderProgram shader;
 
     private float BOX_TO_WORLD;
 
     @SuppressWarnings("unchecked")
-    public LiquidRenderSystem(Viewport viewport, ParticleSystem particleSystem) {
+    public LiquidRenderSystem(Viewport viewport, ParticleSystem particleSystem,
+                              Texture particleTexture, ShaderProgram shader) {
         super(Family.all(LiquidComponent.class).get());
 
         targetView = viewport;
         this.particleSystem = particleSystem;
+        this.particleTexture = particleTexture;
+        this.shader = shader;
 
         batch = new SpriteBatch();
         fbo = new FrameBuffer(Pixmap.Format.RGBA8888,
@@ -56,8 +63,10 @@ public class LiquidRenderSystem extends IteratingSystem implements EntityListene
         LiquidComponent liquid = liquidM.get(entity);
         if (liquid.isGroup) {
             particleSystem.createParticleGroup(liquid.particleGroupDef);
+            liquid.particleGroupDef.shape.dispose();
         } else {
             particleSystem.createParticle(liquid.particleDef);
+            // TODO: Dispose of the particle shape
         }
     }
 
@@ -71,45 +80,42 @@ public class LiquidRenderSystem extends IteratingSystem implements EntityListene
 
     }
 
-    // TODO: This drawing isn't right. begin() and the entity loop are not in the correct logical order.
     @Override
     public void update(float deltaTime) {
         if (getEntities() == null) return;
 
-        for (Entity entity : getEntities()) {
-            LiquidComponent liquid = liquidM.get(entity);
+        // Start drawing to the FBO
+        fbo.begin();
 
-            // Start drawing to the FBO
-            fbo.begin();
+        Gdx.gl.glClearColor(0, 0, 0, 1);
+        Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
 
-            Gdx.gl.glClearColor(0, 0, 0, 1);
-            Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
+        batch.setShader(null);
+        batch.begin();
 
-            batch.setShader(null);
-            batch.begin();
-            for (Vector2 pos : particleSystem.getParticlePositionBuffer()) {
-                int screenX = ViewportUtils.worldToScreenX(targetView, (int)(pos.x * BOX_TO_WORLD));
-                int screenY = ViewportUtils.worldToScreenY(targetView, (int)targetView.getWorldHeight() - (int)(pos.y * BOX_TO_WORLD));
+        for (Vector2 pos : particleSystem.getParticlePositionBuffer()) {
+            int screenX = ViewportUtils.worldToScreenX(targetView, (int)(pos.x * BOX_TO_WORLD));
+            int screenY = ViewportUtils.worldToScreenY(targetView, (int)targetView.getWorldHeight() - (int)(pos.y * BOX_TO_WORLD));
 
-                if (isParticleVisible(screenX, screenY,
-                        liquid.particleTexture.getWidth(), liquid.particleTexture.getHeight())) {
-                    batch.draw(liquid.particleTexture,
-                            screenX - (liquid.particleTexture.getWidth() / 2),
-                            screenY - (liquid.particleTexture.getHeight() / 2)
-                    );
-                }
+            if (isParticleVisible(screenX, screenY,
+                    particleTexture.getWidth(), particleTexture.getHeight())) {
+                batch.draw(particleTexture,
+                        screenX - (particleTexture.getWidth() / 2),
+                        screenY - (particleTexture.getHeight() / 2)
+                );
             }
-            batch.end();
-
-            // Stop drawing to the FBO
-            fbo.end(targetView.getScreenX(), targetView.getScreenY(),
-                    targetView.getScreenWidth(), targetView.getScreenHeight());
-
-            batch.setShader(liquid.shader);
-            batch.begin();
-            batch.draw(fbo.getColorBufferTexture(), 0, 0);
-            batch.end();
         }
+
+        batch.end();
+
+        // Stop drawing to the FBO
+        fbo.end(targetView.getScreenX(), targetView.getScreenY(),
+                targetView.getScreenWidth(), targetView.getScreenHeight());
+
+        batch.setShader(shader);
+        batch.begin();
+        batch.draw(fbo.getColorBufferTexture(), 0, 0);
+        batch.end();
     }
 
     private boolean isParticleVisible(int screenX, int screenY, float width, float height) {

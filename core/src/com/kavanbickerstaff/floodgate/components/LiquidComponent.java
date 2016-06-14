@@ -9,9 +9,6 @@ import finnstr.libgdx.liquidfun.ParticleGroupDef;
 
 public class LiquidComponent implements Component {
 
-    public Texture particleTexture;
-    public ShaderProgram shader;
-
     public ParticleGroupDef particleGroupDef;
     public ParticleDef particleDef;
     public boolean isGroup;

@@ -23,9 +23,11 @@ import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.viewport.StretchViewport;
 import com.kavanbickerstaff.floodgate.components.LiquidComponent;
 import com.kavanbickerstaff.floodgate.components.InventoryComponent;
+import com.kavanbickerstaff.floodgate.components.LiquidSpawnComponent;
 import com.kavanbickerstaff.floodgate.systems.CompatibilityPhysicsSystem;
 import com.kavanbickerstaff.floodgate.systems.InventorySystem;
 import com.kavanbickerstaff.floodgate.systems.LiquidRenderSystem;
+import com.kavanbickerstaff.floodgate.systems.LiquidSpawnSystem;
 import com.uwsoft.editor.renderer.SceneLoader;
 import com.uwsoft.editor.renderer.components.MainItemComponent;
 import com.uwsoft.editor.renderer.components.physics.PhysicsBodyComponent;
@@ -103,31 +105,31 @@ public class GameScreen implements Screen, InputProcessor {
         // Inject modified PhysicsSystem to handle particles
         engine.removeSystem(engine.getSystem(PhysicsSystem.class));
         engine.addSystem(new CompatibilityPhysicsSystem(world, particleSystem));
-        engine.addSystem(new LiquidRenderSystem(viewport, particleSystem));
+        String vertexShader = Gdx.files.internal("water_shader.vert").readString();
+        String fragmentShader = Gdx.files.internal("water_shader.frag").readString();
+        engine.addSystem(new LiquidRenderSystem(viewport, particleSystem,
+                new Texture(Gdx.files.internal("water_particle_alpha_64.png")),
+                new ShaderProgram(vertexShader, fragmentShader)));
         engine.addSystem(new InventorySystem(hud));
+        engine.addSystem(new LiquidSpawnSystem());
 
-        // Add PlaceableComponents to all entities marked with "placeable" tag
+        // Add InventoryComponents to all entities marked with "placeable" tag
         for (Entity entity : getEntitiesByTag("placeable")) {
             entity.add(new InventoryComponent());
+        }
+
+        // Add LiquidSpawnComponents to all entities marker with "liquid_spawn" tag
+        for (Entity entity : getEntitiesByTag("liquid_spawn")) {
+            LiquidSpawnComponent liquidSpawn = new LiquidSpawnComponent();
+            liquidSpawn.on = true;
+            liquidSpawn.spawnTimeMillis = 5000;
+            entity.add(liquidSpawn);
         }
 
         scrollSpeed = viewport.getWorldWidth() / (float)Gdx.graphics.getWidth();
 
         batch = new SpriteBatch();
         backgroundTexture = new Texture(Gdx.files.internal("sewer_background.png"));
-
-        // Liquid component initialization
-        LiquidComponent liquid = new LiquidComponent(true);
-        liquid.particleTexture = new Texture(Gdx.files.internal("water_particle_alpha_64.png"));
-        String vertexShader = Gdx.files.internal("water_shader.vert").readString();
-        String fragmentShader = Gdx.files.internal("water_shader.frag").readString();
-        liquid.shader = new ShaderProgram(vertexShader, fragmentShader);
-        liquid.particleGroupDef = createParticleGroupDef(viewport.getWorldWidth(), viewport.getWorldHeight());
-
-        // Particle group entity initialization
-        Entity liquidEntity = new Entity();
-        liquidEntity.add(liquid);
-        engine.addEntity(liquidEntity);
 
         // FreeType font initialization
         FreeTypeFontGenerator fontGenerator = new FreeTypeFontGenerator(Gdx.files.internal("fonts/arial.ttf"));
@@ -166,6 +168,8 @@ public class GameScreen implements Screen, InputProcessor {
 
         batch.begin();
         font.draw(batch, "FPS: " + Gdx.graphics.getFramesPerSecond(), 0, Gdx.graphics.getHeight());
+        font.draw(batch, "Particles: " + debugParticleSystem.getParticleCount(), 0, Gdx.graphics.getHeight() - (font.getCapHeight() + 10));
+        font.draw(batch, "Entities: " + engine.getEntities().size(), 0, Gdx.graphics.getHeight() - (font.getCapHeight() + 10) * 2);
         batch.end();
     }
 
@@ -203,21 +207,6 @@ public class GameScreen implements Screen, InputProcessor {
         particleSystemDef.density = 1.3f;   // Watch out for this!
 
         return new ParticleSystem(world, particleSystemDef);
-    }
-
-    private ParticleGroupDef createParticleGroupDef(float width, float height) {
-        ParticleGroupDef groupDef = new ParticleGroupDef();
-        groupDef.color.set(1, 0, 0, 1);
-        groupDef.flags.add(ParticleDef.ParticleType.b2_waterParticle);
-        groupDef.position.set((width / 2) * WORLD_TO_BOX, height * WORLD_TO_BOX);
-
-        PolygonShape shape = new PolygonShape();
-        shape.setAsBox((width / 6) * WORLD_TO_BOX, (height / 6) * WORLD_TO_BOX);
-        groupDef.shape = shape;
-
-        groupDef.linearVelocity.set(0, -10);
-
-        return groupDef;
     }
 
     private void createCircleBody(float pX, float pY, float pRadius) {
