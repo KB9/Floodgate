@@ -51,7 +51,7 @@ public class LiquidSpawnSystem extends IteratingSystem implements EntityListener
     @Override
     public void entityAdded(Entity entity) {
         MainItemComponent main = mainM.get(entity);
-        spawnTrackerMap.put(main.uniqueId, 0L);
+        spawnTrackerMap.put(main.uniqueId, TimeUtils.millis());
     }
 
     @Override

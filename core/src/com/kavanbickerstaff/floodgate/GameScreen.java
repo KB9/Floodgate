@@ -16,6 +16,7 @@ import com.badlogic.gdx.physics.box2d.Body;
 import com.badlogic.gdx.physics.box2d.BodyDef;
 import com.badlogic.gdx.physics.box2d.Box2DDebugRenderer;
 import com.badlogic.gdx.physics.box2d.CircleShape;
+import com.badlogic.gdx.physics.box2d.Contact;
 import com.badlogic.gdx.physics.box2d.FixtureDef;
 import com.badlogic.gdx.physics.box2d.PolygonShape;
 import com.badlogic.gdx.physics.box2d.World;
@@ -23,9 +24,11 @@ import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.viewport.StretchViewport;
 import com.kavanbickerstaff.floodgate.components.LiquidComponent;
 import com.kavanbickerstaff.floodgate.components.InventoryComponent;
+import com.kavanbickerstaff.floodgate.components.LiquidDespawnComponent;
 import com.kavanbickerstaff.floodgate.components.LiquidSpawnComponent;
 import com.kavanbickerstaff.floodgate.systems.CompatibilityPhysicsSystem;
 import com.kavanbickerstaff.floodgate.systems.InventorySystem;
+import com.kavanbickerstaff.floodgate.systems.LiquidDespawnSystem;
 import com.kavanbickerstaff.floodgate.systems.LiquidRenderSystem;
 import com.kavanbickerstaff.floodgate.systems.LiquidSpawnSystem;
 import com.uwsoft.editor.renderer.SceneLoader;
@@ -112,6 +115,7 @@ public class GameScreen implements Screen, InputProcessor {
                 new ShaderProgram(vertexShader, fragmentShader)));
         engine.addSystem(new InventorySystem(hud));
         engine.addSystem(new LiquidSpawnSystem());
+        engine.addSystem(new LiquidDespawnSystem(world, particleSystem));
 
         // Add InventoryComponents to all entities marked with "placeable" tag
         for (Entity entity : getEntitiesByTag("placeable")) {
@@ -124,6 +128,12 @@ public class GameScreen implements Screen, InputProcessor {
             liquidSpawn.on = true;
             liquidSpawn.spawnTimeMillis = 5000;
             entity.add(liquidSpawn);
+        }
+
+        // Add LiquidDespawnComponents to all entities marker with "liquid_despawn" tag
+        for (Entity entity : getEntitiesByTag("liquid_despawn")) {
+            LiquidDespawnComponent liquidDespawn = new LiquidDespawnComponent();
+            entity.add(liquidDespawn);
         }
 
         scrollSpeed = viewport.getWorldWidth() / (float)Gdx.graphics.getWidth();
