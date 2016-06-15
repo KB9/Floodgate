@@ -8,9 +8,11 @@ import com.badlogic.ashley.core.Family;
 import com.badlogic.ashley.systems.IteratingSystem;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.GL20;
+import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
+import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.graphics.glutils.FrameBuffer;
 import com.badlogic.gdx.graphics.glutils.ShaderProgram;
 import com.badlogic.gdx.math.Vector2;
@@ -27,7 +29,7 @@ public class LiquidRenderSystem extends IteratingSystem implements EntityListene
 
     private SpriteBatch batch;
     private FrameBuffer fbo;
-    private Viewport targetView;
+    private OrthographicCamera camera;
 
     private ParticleSystem particleSystem;
     private Texture particleTexture;
@@ -36,11 +38,11 @@ public class LiquidRenderSystem extends IteratingSystem implements EntityListene
     private float BOX_TO_WORLD;
 
     @SuppressWarnings("unchecked")
-    public LiquidRenderSystem(Viewport viewport, ParticleSystem particleSystem,
+    public LiquidRenderSystem(OrthographicCamera camera, ParticleSystem particleSystem,
                               Texture particleTexture, ShaderProgram shader) {
         super(Family.all(LiquidComponent.class).get());
 
-        targetView = viewport;
+        this.camera = camera;
         this.particleSystem = particleSystem;
         this.particleTexture = particleTexture;
         this.shader = shader;
@@ -93,15 +95,20 @@ public class LiquidRenderSystem extends IteratingSystem implements EntityListene
         batch.setShader(null);
         batch.begin();
 
+        camera.update(true);
         for (Vector2 pos : particleSystem.getParticlePositionBuffer()) {
-            int screenX = ViewportUtils.worldToScreenX(targetView, (int)(pos.x * BOX_TO_WORLD));
-            int screenY = ViewportUtils.worldToScreenY(targetView, (int)targetView.getWorldHeight() - (int)(pos.y * BOX_TO_WORLD));
+            int screenX = ViewportUtils.worldToScreenX(camera, (int)(pos.x * BOX_TO_WORLD));
+            int screenY = Gdx.graphics.getHeight() - ViewportUtils.worldToScreenY(camera, (int)(pos.y * BOX_TO_WORLD));
+            float scaledWidth = particleTexture.getWidth() / camera.zoom;
+            float scaledHeight = particleTexture.getHeight() / camera.zoom;
 
             if (isParticleVisible(screenX, screenY,
                     particleTexture.getWidth(), particleTexture.getHeight())) {
                 batch.draw(particleTexture,
-                        screenX - (particleTexture.getWidth() / 2),
-                        screenY - (particleTexture.getHeight() / 2)
+                        screenX - (scaledWidth / 2),
+                        screenY - (scaledHeight / 2),
+                        scaledWidth,
+                        scaledHeight
                 );
             }
         }
@@ -109,8 +116,7 @@ public class LiquidRenderSystem extends IteratingSystem implements EntityListene
         batch.end();
 
         // Stop drawing to the FBO
-        fbo.end(targetView.getScreenX(), targetView.getScreenY(),
-                targetView.getScreenWidth(), targetView.getScreenHeight());
+        fbo.end();
 
         batch.setShader(shader);
         batch.begin();

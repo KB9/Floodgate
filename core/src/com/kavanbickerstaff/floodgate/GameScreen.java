@@ -3,15 +3,20 @@ package com.kavanbickerstaff.floodgate;
 import com.badlogic.ashley.core.Engine;
 import com.badlogic.ashley.core.Entity;
 import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.InputMultiplexer;
 import com.badlogic.gdx.InputProcessor;
 import com.badlogic.gdx.Screen;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
+import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator;
 import com.badlogic.gdx.graphics.glutils.ShaderProgram;
+import com.badlogic.gdx.input.GestureDetector;
+import com.badlogic.gdx.math.Vector2;
+import com.badlogic.gdx.math.Vector3;
 import com.badlogic.gdx.physics.box2d.Body;
 import com.badlogic.gdx.physics.box2d.BodyDef;
 import com.badlogic.gdx.physics.box2d.Box2DDebugRenderer;
@@ -21,6 +26,8 @@ import com.badlogic.gdx.physics.box2d.FixtureDef;
 import com.badlogic.gdx.physics.box2d.PolygonShape;
 import com.badlogic.gdx.physics.box2d.World;
 import com.badlogic.gdx.utils.Array;
+import com.badlogic.gdx.utils.IntArray;
+import com.badlogic.gdx.utils.IntMap;
 import com.badlogic.gdx.utils.viewport.StretchViewport;
 import com.kavanbickerstaff.floodgate.components.LiquidComponent;
 import com.kavanbickerstaff.floodgate.components.InventoryComponent;
@@ -58,6 +65,7 @@ public class GameScreen implements Screen, InputProcessor {
     // When attempting to draw to these black bars, the drawing is clamped to the viewport
     // coordinates.
     private StretchViewport viewport;
+    private OrthographicCamera viewportCamera;
     private SceneLoader sceneLoader;
     private Engine engine;
     private World world;
@@ -72,7 +80,11 @@ public class GameScreen implements Screen, InputProcessor {
     private HUD hud;
 
     private int lastX, lastY;
+    private int pointerCount;
     private float scrollSpeed;
+    private float zoomSpeed;
+    private IntArray zoomPointers = new IntArray();
+    private float lastDistance;
 
     private BitmapFont font;
 
@@ -85,6 +97,8 @@ public class GameScreen implements Screen, InputProcessor {
         viewport = new StretchViewport(800, 480);
         sceneLoader = new SceneLoader();
         sceneLoader.loadScene("MainScene", viewport);
+
+        viewportCamera = (OrthographicCamera)viewport.getCamera();
 
         // Get the world -> Box2D scalar
         BOX_TO_WORLD = 1f / PhysicsBodyLoader.getScale();
@@ -110,7 +124,7 @@ public class GameScreen implements Screen, InputProcessor {
         engine.addSystem(new CompatibilityPhysicsSystem(world, particleSystem));
         String vertexShader = Gdx.files.internal("water_shader.vert").readString();
         String fragmentShader = Gdx.files.internal("water_shader.frag").readString();
-        engine.addSystem(new LiquidRenderSystem(viewport, particleSystem,
+        engine.addSystem(new LiquidRenderSystem(viewportCamera, particleSystem,
                 new Texture(Gdx.files.internal("water_particle_alpha_64.png")),
                 new ShaderProgram(vertexShader, fragmentShader)));
         engine.addSystem(new InventorySystem(hud));
@@ -137,6 +151,7 @@ public class GameScreen implements Screen, InputProcessor {
         }
 
         scrollSpeed = viewport.getWorldWidth() / (float)Gdx.graphics.getWidth();
+        zoomSpeed = scrollSpeed * 2;
 
         batch = new SpriteBatch();
         backgroundTexture = new Texture(Gdx.files.internal("sewer_background.png"));
@@ -151,7 +166,9 @@ public class GameScreen implements Screen, InputProcessor {
         // Debug renderer initialization
         debugRenderer = new Box2DDebugRenderer();
         particleDebugRenderer = new ParticleDebugRenderer(new Color(0, 1, 0, 1),
-                particleSystem.getParticleCount());
+                1000000);
+
+        viewportCamera.update();
     }
 
     @Override
@@ -171,8 +188,8 @@ public class GameScreen implements Screen, InputProcessor {
 
         engine.update(Gdx.graphics.getDeltaTime());
 
-        debugRenderer.render(world, viewport.getCamera().combined);
-        //particleDebugRenderer.render(debugParticleSystem, BOX_TO_WORLD, viewport.getCamera().combined);
+        debugRenderer.render(world, viewportCamera.combined.cpy().scl(BOX_TO_WORLD));
+        //particleDebugRenderer.render(debugParticleSystem, BOX_TO_WORLD, viewportCamera.combined.cpy().scl(BOX_TO_WORLD));
 
         hud.render();
 
@@ -180,6 +197,7 @@ public class GameScreen implements Screen, InputProcessor {
         font.draw(batch, "FPS: " + Gdx.graphics.getFramesPerSecond(), 0, Gdx.graphics.getHeight());
         font.draw(batch, "Particles: " + debugParticleSystem.getParticleCount(), 0, Gdx.graphics.getHeight() - (font.getCapHeight() + 10));
         font.draw(batch, "Entities: " + engine.getEntities().size(), 0, Gdx.graphics.getHeight() - (font.getCapHeight() + 10) * 2);
+        font.draw(batch, "Pointers: "  + pointerCount, 0, Gdx.graphics.getHeight() - (font.getCapHeight() + 10) * 3);
         batch.end();
     }
 
@@ -259,6 +277,31 @@ public class GameScreen implements Screen, InputProcessor {
         return null;
     }
 
+    private void swapPanPointer() {
+        for (int i = 0; i < 20; i++) {
+            if (Gdx.input.isTouched(i)) {
+                lastX = Gdx.input.getX(i);
+                lastY = Gdx.input.getY(i);
+                break;
+            }
+        }
+    }
+
+    private void swapZoomPointer(int pointer) {
+        for (int i = 0; i < 20; i++) {
+            if (Gdx.input.isTouched(i) && !zoomPointers.contains(i)) {
+                zoomPointers.set(zoomPointers.indexOf(pointer), i);
+
+                // TODO: Don't know how safe this is. Comment the logic.
+                lastDistance = Vector2.dst(
+                        Gdx.input.getX(zoomPointers.get(0)), Gdx.input.getY(zoomPointers.get(0)),
+                        Gdx.input.getX(zoomPointers.get(1)), Gdx.input.getY(zoomPointers.get(1))
+                );
+                break;
+            }
+        }
+    }
+
     @Override
     public boolean keyDown(int keycode) {
         return false;
@@ -276,26 +319,46 @@ public class GameScreen implements Screen, InputProcessor {
 
     @Override
     public boolean touchDown(int screenX, int screenY, int pointer, int button) {
+        pointerCount++;
+
         lastX = screenX;
         lastY = screenY;
 
-        if (screenX >= hud.getX() && screenX <= (hud.getX() + hud.getWidth()) &&
-                screenY >= hud.getY() && screenY <= (hud.getY() + hud.getHeight())) {
+        if (zoomPointers.size < 2) {
+            zoomPointers.add(pointer);
 
-            int entityId = hud.getItemIdFromPosition(screenX, Gdx.graphics.getHeight() - screenY);
-            if (entityId >= 0) {
-                // Faster search if iterating on subset rather than iterating over all entities
-                for (Entity e : engine.getSystem(InventorySystem.class).getEntities()) {
-                    MainItemComponent main = e.getComponent(MainItemComponent.class);
-                    InventoryComponent inventory = e.getComponent(InventoryComponent.class);
-                    if (main != null && inventory != null && main.uniqueId == entityId) {
-                        main.visible = true;
-                        hud.setAlpha(0.25f);
-                        heldEntity = e;
-                        break;
+            if (zoomPointers.size == 2) {
+                lastDistance = Vector2.dst(
+                        Gdx.input.getX(zoomPointers.get(0)), Gdx.input.getY(zoomPointers.get(0)),
+                        Gdx.input.getX(zoomPointers.get(1)), Gdx.input.getY(zoomPointers.get(1))
+                );
+            }
+        }
+
+        switch (pointerCount) {
+            case 1: {
+                // If the user touched the HUD
+                if (screenX >= hud.getX() && screenX <= (hud.getX() + hud.getWidth()) &&
+                        screenY >= hud.getY() && screenY <= (hud.getY() + hud.getHeight())) {
+
+                    // Get the correct slot from the position and hence get the associated entity
+                    int entityId = hud.getItemIdFromPosition(screenX, Gdx.graphics.getHeight() - screenY);
+                    if (entityId >= 0) {
+                        // Faster search if iterating on subset rather than iterating over all entities
+                        for (Entity e : engine.getSystem(InventorySystem.class).getEntities()) {
+                            MainItemComponent main = e.getComponent(MainItemComponent.class);
+                            InventoryComponent inventory = e.getComponent(InventoryComponent.class);
+                            if (main != null && inventory != null && main.uniqueId == entityId) {
+                                main.visible = true;
+                                hud.setAlpha(0.25f);
+                                heldEntity = e;
+                                break;
+                            }
+                        }
                     }
                 }
             }
+            break;
         }
 
         return true;
@@ -303,8 +366,19 @@ public class GameScreen implements Screen, InputProcessor {
 
     @Override
     public boolean touchUp(int screenX, int screenY, int pointer, int button) {
+        swapPanPointer();
+
+        if (zoomPointers.contains(pointer)) {
+            if (pointerCount > 2) swapZoomPointer(pointer);
+            zoomPointers.removeValue(pointer);
+        }
+
+        pointerCount--;
+
+        // If there is an entity currently being positioned
         if (heldEntity != null) {
 
+            // If the user touched the HUD
             if (screenX >= hud.getX() && screenX <= (hud.getX() + hud.getWidth()) &&
                     screenY >= hud.getY() && screenY <= (hud.getY() + hud.getHeight())) {
                 MainItemComponent main = ComponentRetriever.get(heldEntity, MainItemComponent.class);
@@ -322,22 +396,43 @@ public class GameScreen implements Screen, InputProcessor {
 
     @Override
     public boolean touchDragged(int screenX, int screenY, int pointer) {
-        if (heldEntity != null) {
-            PhysicsBodyComponent physicsBody = ComponentRetriever.get(heldEntity, PhysicsBodyComponent.class);
-            physicsBody.body.setTransform(
-                    ViewportUtils.screenToWorldX(viewport, screenX) * WORLD_TO_BOX,
-                    ViewportUtils.screenToWorldY(viewport, Gdx.graphics.getHeight() - screenY) * WORLD_TO_BOX,
-                    physicsBody.body.getAngle()
-            );
-        } else {
-            viewport.getCamera().position.add(
-                    (lastX - screenX) * scrollSpeed,
-                    (screenY - lastY) * scrollSpeed,
-                    0);
-        }
+        switch (pointerCount) {
+            case 1: {
+                // If there is an entity currently being positioned, move it to pointer position
+                if (heldEntity != null) {
+                    PhysicsBodyComponent physicsBody = ComponentRetriever.get(heldEntity, PhysicsBodyComponent.class);
+                    physicsBody.body.setTransform(
+                            ViewportUtils.screenToWorldX(viewportCamera, screenX) * WORLD_TO_BOX,
+                            ViewportUtils.screenToWorldY(viewportCamera, screenY) * WORLD_TO_BOX,
+                            physicsBody.body.getAngle()
+                    );
+                } else {
+                    viewportCamera.position.add(
+                            (lastX - screenX) * scrollSpeed,
+                            (screenY - lastY) * scrollSpeed,
+                            0);
+                }
 
-        lastX = screenX;
-        lastY = screenY;
+                lastX = screenX;
+                lastY = screenY;
+            }
+            break;
+
+            case 2: {
+                if (zoomPointers.size < 2) return true;
+
+                float distance = Vector2.dst(
+                        Gdx.input.getX(zoomPointers.get(0)), Gdx.input.getY(zoomPointers.get(0)),
+                        Gdx.input.getX(zoomPointers.get(1)), Gdx.input.getY(zoomPointers.get(1))
+                );
+
+                float delta = (lastDistance - distance) * 0.005f;
+                viewportCamera.zoom += delta;
+                if (viewportCamera.zoom < 0) viewportCamera.zoom = 0;
+
+                lastDistance = distance;
+            }
+        }
 
         return true;
     }
