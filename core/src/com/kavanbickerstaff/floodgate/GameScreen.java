@@ -2,6 +2,7 @@ package com.kavanbickerstaff.floodgate;
 
 import com.badlogic.ashley.core.Engine;
 import com.badlogic.ashley.core.Entity;
+import com.badlogic.ashley.core.Family;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.InputMultiplexer;
 import com.badlogic.gdx.InputProcessor;
@@ -59,6 +60,10 @@ public class GameScreen implements Screen, InputProcessor {
     private float BOX_TO_WORLD;
     private float WORLD_TO_BOX;
 
+    private static final float ZOOM_IN_LIMIT = 0.75f;
+    private static final float ZOOM_OUT_LIMIT = 2.0f;
+    private static final float ZOOM_MODIFIER = 0.005f;
+
     // TODO: Moved from FitViewport to StretchViewport.
     // Viewport seems to affect SpriteBatch drawing coordinates. For example,
     // when I use FitViewport(800,480), black bars appear at the sides of the screen.
@@ -84,7 +89,6 @@ public class GameScreen implements Screen, InputProcessor {
     private boolean[] activePointers = new boolean[20];
     private int panPointer;
     private float scrollSpeed;
-    private float zoomSpeed;
     private IntArray zoomPointers = new IntArray();
     private float lastDistance;
 
@@ -98,7 +102,7 @@ public class GameScreen implements Screen, InputProcessor {
         // Load the scene using the specified viewport size
         viewport = new StretchViewport(800, 480);
         sceneLoader = new SceneLoader();
-        sceneLoader.loadScene("MainScene", viewport);
+        sceneLoader.loadScene("Level_1", viewport);
 
         viewportCamera = (OrthographicCamera)viewport.getCamera();
 
@@ -153,7 +157,6 @@ public class GameScreen implements Screen, InputProcessor {
         }
 
         scrollSpeed = viewport.getWorldWidth() / (float)Gdx.graphics.getWidth();
-        zoomSpeed = scrollSpeed * 2;
 
         batch = new SpriteBatch();
         backgroundTexture = new Texture(Gdx.files.internal("sewer_background.png"));
@@ -169,8 +172,6 @@ public class GameScreen implements Screen, InputProcessor {
         debugRenderer = new Box2DDebugRenderer();
         particleDebugRenderer = new ParticleDebugRenderer(new Color(0, 1, 0, 1),
                 1000000);
-
-        viewportCamera.update();
     }
 
     @Override
@@ -188,9 +189,12 @@ public class GameScreen implements Screen, InputProcessor {
         batch.draw(backgroundTexture, 0, 0, Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
         batch.end();
 
+        // Update all systems
         engine.update(Gdx.graphics.getDeltaTime());
 
-        debugRenderer.render(world, viewportCamera.combined.cpy().scl(BOX_TO_WORLD));
+        // Viewport camera is modified by Overlap2D renderer, so update it again for debug rendering
+        //viewportCamera.update();
+        //debugRenderer.render(world, viewportCamera.combined.cpy().scl(BOX_TO_WORLD));
         //particleDebugRenderer.render(debugParticleSystem, BOX_TO_WORLD, viewportCamera.combined.cpy().scl(BOX_TO_WORLD));
 
         hud.render();
@@ -234,27 +238,9 @@ public class GameScreen implements Screen, InputProcessor {
         ParticleSystemDef particleSystemDef = new ParticleSystemDef();
         particleSystemDef.radius = 6f * WORLD_TO_BOX;
         particleSystemDef.dampingStrength = 0.2f;
-        particleSystemDef.density = 1.3f;   // Watch out for this!
+        particleSystemDef.density = 1.3f;
 
         return new ParticleSystem(world, particleSystemDef);
-    }
-
-    private void createCircleBody(float pX, float pY, float pRadius) {
-        BodyDef bodyDef = new BodyDef();
-        bodyDef.type = BodyDef.BodyType.DynamicBody;
-        bodyDef.position.set(pX * WORLD_TO_BOX, pY * WORLD_TO_BOX);
-        Body body = world.createBody(bodyDef);
-
-        CircleShape shape = new CircleShape();
-        shape.setRadius(pRadius * WORLD_TO_BOX);
-
-        FixtureDef fixDef = new FixtureDef();
-        fixDef.density = 1.0f;
-        fixDef.friction = 0.5f;
-        fixDef.shape = shape;
-        fixDef.restitution = 0.5f;
-
-        body.createFixture(fixDef);
     }
 
     private Array<Entity> getEntitiesByTag(String tag) {
@@ -350,10 +336,21 @@ public class GameScreen implements Screen, InputProcessor {
                         for (Entity e : engine.getSystem(InventorySystem.class).getEntities()) {
                             MainItemComponent main = e.getComponent(MainItemComponent.class);
                             InventoryComponent inventory = e.getComponent(InventoryComponent.class);
-                            if (main != null && inventory != null && main.uniqueId == entityId) {
+                            PhysicsBodyComponent physicsBody = e.getComponent(PhysicsBodyComponent.class);
+
+                            if (main != null && inventory != null && physicsBody != null && main.uniqueId == entityId) {
+                                heldEntity = e;
+
+                                // Reposition the body before making visible
+                                physicsBody.body.setTransform(
+                                        ViewportUtils.screenToWorldX(viewportCamera, screenX) * WORLD_TO_BOX,
+                                        ViewportUtils.screenToWorldY(viewportCamera, screenY) * WORLD_TO_BOX,
+                                        physicsBody.body.getAngle()
+                                );
+
+                                // Make the entity visible to the user
                                 main.visible = true;
                                 hud.setAlpha(0.25f);
-                                heldEntity = e;
                                 break;
                             }
                         }
@@ -385,7 +382,7 @@ public class GameScreen implements Screen, InputProcessor {
         // If this pointer was used for panning, swap it for another available pointer
         if (pointer == panPointer && pointerCount >= 1) swapPanPointer();
 
-        // If there is an entity currently being positioned
+        // If there is an entity currently being positioned, drop or store it
         if (heldEntity != null) {
 
             // If the user touched the HUD
@@ -397,6 +394,7 @@ public class GameScreen implements Screen, InputProcessor {
                 heldEntity.remove(InventoryComponent.class);
                 heldEntity = null;
             }
+
             hud.setAlpha(1);
             heldEntity = null;
         }
@@ -417,9 +415,11 @@ public class GameScreen implements Screen, InputProcessor {
                             physicsBody.body.getAngle()
                     );
                 } else {
+                    float deltaX = lastX - Gdx.input.getX(panPointer);
+                    float deltaY = Gdx.input.getY(panPointer) - lastY;
                     viewportCamera.position.add(
-                            (lastX - Gdx.input.getX(panPointer)) * scrollSpeed,
-                            (Gdx.input.getY(panPointer) - lastY) * scrollSpeed,
+                            deltaX * scrollSpeed * viewportCamera.zoom,
+                            deltaY * scrollSpeed * viewportCamera.zoom,
                             0
                     );
                 }
@@ -436,9 +436,10 @@ public class GameScreen implements Screen, InputProcessor {
                 );
 
                 // Move the camera by the calculated delta
-                float delta = (lastDistance - distance) * 0.005f;
+                float delta = (lastDistance - distance) * ZOOM_MODIFIER;
                 viewportCamera.zoom += delta;
-                if (viewportCamera.zoom < 0) viewportCamera.zoom = 0;
+                if (viewportCamera.zoom < ZOOM_IN_LIMIT) viewportCamera.zoom = ZOOM_IN_LIMIT;
+                if (viewportCamera.zoom > ZOOM_OUT_LIMIT) viewportCamera.zoom = ZOOM_OUT_LIMIT;
 
                 lastDistance = distance;
             }

@@ -84,7 +84,7 @@ public class LiquidRenderSystem extends IteratingSystem implements EntityListene
 
     @Override
     public void update(float deltaTime) {
-        if (getEntities() == null) return;
+        if (getEntities().size() == 0) return;
 
         // Start drawing to the FBO
         fbo.begin();
@@ -93,9 +93,9 @@ public class LiquidRenderSystem extends IteratingSystem implements EntityListene
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
 
         batch.setShader(null);
+        camera.update();
         batch.begin();
 
-        camera.update(true);
         for (Vector2 pos : particleSystem.getParticlePositionBuffer()) {
             int screenX = ViewportUtils.worldToScreenX(camera, (int)(pos.x * BOX_TO_WORLD));
             int screenY = Gdx.graphics.getHeight() - ViewportUtils.worldToScreenY(camera, (int)(pos.y * BOX_TO_WORLD));

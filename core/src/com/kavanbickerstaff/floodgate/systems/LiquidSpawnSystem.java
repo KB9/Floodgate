@@ -6,6 +6,7 @@ import com.badlogic.ashley.core.Entity;
 import com.badlogic.ashley.core.EntityListener;
 import com.badlogic.ashley.core.Family;
 import com.badlogic.ashley.systems.IteratingSystem;
+import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.physics.box2d.PolygonShape;
 import com.badlogic.gdx.utils.IntMap;
 import com.badlogic.gdx.utils.TimeUtils;
@@ -33,6 +34,7 @@ public class LiquidSpawnSystem extends IteratingSystem implements EntityListener
     @SuppressWarnings("unchecked")
     public LiquidSpawnSystem() {
         super(Family.all(LiquidSpawnComponent.class,
+                TransformComponent.class,
                 DimensionsComponent.class,
                 MainItemComponent.class).get());
 
@@ -73,7 +75,7 @@ public class LiquidSpawnSystem extends IteratingSystem implements EntityListener
             spawnTrackerMap.put(main.uniqueId, currentTime);
 
             if (spawn.on) {
-                spawnLiquid(transform.x, transform.y, dimensions.width, dimensions.height);
+                spawnLiquid(transform.x, transform.y, dimensions.width * transform.scaleX, dimensions.height * transform.scaleY);
             }
         }
     }
