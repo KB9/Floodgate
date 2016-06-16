@@ -81,6 +81,8 @@ public class GameScreen implements Screen, InputProcessor {
 
     private int lastX, lastY;
     private int pointerCount;
+    private boolean[] activePointers = new boolean[20];
+    private int panPointer;
     private float scrollSpeed;
     private float zoomSpeed;
     private IntArray zoomPointers = new IntArray();
@@ -279,7 +281,8 @@ public class GameScreen implements Screen, InputProcessor {
 
     private void swapPanPointer() {
         for (int i = 0; i < 20; i++) {
-            if (Gdx.input.isTouched(i)) {
+            if (activePointers[i]) {
+                panPointer = i;
                 lastX = Gdx.input.getX(i);
                 lastY = Gdx.input.getY(i);
                 break;
@@ -289,10 +292,9 @@ public class GameScreen implements Screen, InputProcessor {
 
     private void swapZoomPointer(int pointer) {
         for (int i = 0; i < 20; i++) {
-            if (Gdx.input.isTouched(i) && !zoomPointers.contains(i)) {
+            if (activePointers[i] && !zoomPointers.contains(i)) {
                 zoomPointers.set(zoomPointers.indexOf(pointer), i);
 
-                // TODO: Don't know how safe this is. Comment the logic.
                 lastDistance = Vector2.dst(
                         Gdx.input.getX(zoomPointers.get(0)), Gdx.input.getY(zoomPointers.get(0)),
                         Gdx.input.getX(zoomPointers.get(1)), Gdx.input.getY(zoomPointers.get(1))
@@ -319,14 +321,14 @@ public class GameScreen implements Screen, InputProcessor {
 
     @Override
     public boolean touchDown(int screenX, int screenY, int pointer, int button) {
+        activePointers[pointer] = true;
         pointerCount++;
 
-        lastX = screenX;
-        lastY = screenY;
-
+        // If there is space for another zoom pointer, use the current pointer index
         if (zoomPointers.size < 2) {
             zoomPointers.add(pointer);
 
+            // If two zoom pointers have now been added, calculated the distance between them
             if (zoomPointers.size == 2) {
                 lastDistance = Vector2.dst(
                         Gdx.input.getX(zoomPointers.get(0)), Gdx.input.getY(zoomPointers.get(0)),
@@ -357,6 +359,11 @@ public class GameScreen implements Screen, InputProcessor {
                         }
                     }
                 }
+
+                // Make this pointer index the pan pointer
+                panPointer = pointer;
+                lastX = screenX;
+                lastY = screenY;
             }
             break;
         }
@@ -366,14 +373,17 @@ public class GameScreen implements Screen, InputProcessor {
 
     @Override
     public boolean touchUp(int screenX, int screenY, int pointer, int button) {
-        swapPanPointer();
+        activePointers[pointer] = false;
+        pointerCount--;
 
+        // If this pointer was used for zooming, swap it for another available pointer
         if (zoomPointers.contains(pointer)) {
-            if (pointerCount > 2) swapZoomPointer(pointer);
+            if (pointerCount > 1) swapZoomPointer(pointer);
             zoomPointers.removeValue(pointer);
         }
 
-        pointerCount--;
+        // If this pointer was used for panning, swap it for another available pointer
+        if (pointer == panPointer && pointerCount >= 1) swapPanPointer();
 
         // If there is an entity currently being positioned
         if (heldEntity != null) {
@@ -408,24 +418,24 @@ public class GameScreen implements Screen, InputProcessor {
                     );
                 } else {
                     viewportCamera.position.add(
-                            (lastX - screenX) * scrollSpeed,
-                            (screenY - lastY) * scrollSpeed,
-                            0);
+                            (lastX - Gdx.input.getX(panPointer)) * scrollSpeed,
+                            (Gdx.input.getY(panPointer) - lastY) * scrollSpeed,
+                            0
+                    );
                 }
-
-                lastX = screenX;
-                lastY = screenY;
             }
             break;
 
             case 2: {
                 if (zoomPointers.size < 2) return true;
 
+                // Get the distance between the two zooming pointers
                 float distance = Vector2.dst(
                         Gdx.input.getX(zoomPointers.get(0)), Gdx.input.getY(zoomPointers.get(0)),
                         Gdx.input.getX(zoomPointers.get(1)), Gdx.input.getY(zoomPointers.get(1))
                 );
 
+                // Move the camera by the calculated delta
                 float delta = (lastDistance - distance) * 0.005f;
                 viewportCamera.zoom += delta;
                 if (viewportCamera.zoom < 0) viewportCamera.zoom = 0;
@@ -433,6 +443,10 @@ public class GameScreen implements Screen, InputProcessor {
                 lastDistance = distance;
             }
         }
+
+        // Record the last position of the panning pointer
+        lastX = Gdx.input.getX(panPointer);
+        lastY = Gdx.input.getY(panPointer);
 
         return true;
     }
