@@ -95,6 +95,8 @@ public class LiquidSpawnSystem extends IteratingSystem implements EntityListener
         ParticleGroupDef groupDef = new ParticleGroupDef();
         groupDef.color.set(1, 0, 0, 1);
         groupDef.flags.add(ParticleDef.ParticleType.b2_waterParticle);
+        groupDef.flags.add(ParticleDef.ParticleType.b2_fixtureContactListenerParticle);
+        groupDef.flags.add(ParticleDef.ParticleType.b2_fixtureContactFilterParticle);
         groupDef.position.set(x * WORLD_TO_BOX, y * WORLD_TO_BOX);
 
         PolygonShape shape = new PolygonShape();

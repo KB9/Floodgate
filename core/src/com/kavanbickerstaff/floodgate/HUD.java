@@ -101,6 +101,10 @@ public class HUD {
         return -1;
     }
 
+    public boolean isPointInside(int screenX, int screenY) {
+        return screenX >= x && screenX <= (x + width) && screenY >= y && screenY <= (y + height);
+    }
+
     public int getX() {
         return x;
     }

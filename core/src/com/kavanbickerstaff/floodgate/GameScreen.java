@@ -2,9 +2,7 @@ package com.kavanbickerstaff.floodgate;
 
 import com.badlogic.ashley.core.Engine;
 import com.badlogic.ashley.core.Entity;
-import com.badlogic.ashley.core.Family;
 import com.badlogic.gdx.Gdx;
-import com.badlogic.gdx.InputMultiplexer;
 import com.badlogic.gdx.InputProcessor;
 import com.badlogic.gdx.Screen;
 import com.badlogic.gdx.graphics.Color;
@@ -15,41 +13,35 @@ import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator;
 import com.badlogic.gdx.graphics.glutils.ShaderProgram;
-import com.badlogic.gdx.input.GestureDetector;
 import com.badlogic.gdx.math.Vector2;
-import com.badlogic.gdx.math.Vector3;
 import com.badlogic.gdx.physics.box2d.Body;
-import com.badlogic.gdx.physics.box2d.BodyDef;
 import com.badlogic.gdx.physics.box2d.Box2DDebugRenderer;
-import com.badlogic.gdx.physics.box2d.CircleShape;
-import com.badlogic.gdx.physics.box2d.Contact;
-import com.badlogic.gdx.physics.box2d.FixtureDef;
-import com.badlogic.gdx.physics.box2d.PolygonShape;
+import com.badlogic.gdx.physics.box2d.Fixture;
+import com.badlogic.gdx.physics.box2d.QueryCallback;
 import com.badlogic.gdx.physics.box2d.World;
 import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.IntArray;
-import com.badlogic.gdx.utils.IntMap;
 import com.badlogic.gdx.utils.viewport.StretchViewport;
-import com.kavanbickerstaff.floodgate.components.LiquidComponent;
 import com.kavanbickerstaff.floodgate.components.InventoryComponent;
-import com.kavanbickerstaff.floodgate.components.LiquidDespawnComponent;
+import com.kavanbickerstaff.floodgate.components.LiquidDetectorComponent;
 import com.kavanbickerstaff.floodgate.components.LiquidSpawnComponent;
 import com.kavanbickerstaff.floodgate.systems.CompatibilityPhysicsSystem;
 import com.kavanbickerstaff.floodgate.systems.InventorySystem;
-import com.kavanbickerstaff.floodgate.systems.LiquidDespawnSystem;
+import com.kavanbickerstaff.floodgate.systems.LiquidDetectorSystem;
 import com.kavanbickerstaff.floodgate.systems.LiquidRenderSystem;
 import com.kavanbickerstaff.floodgate.systems.LiquidSpawnSystem;
 import com.uwsoft.editor.renderer.SceneLoader;
+import com.uwsoft.editor.renderer.components.DimensionsComponent;
 import com.uwsoft.editor.renderer.components.MainItemComponent;
+import com.uwsoft.editor.renderer.components.TransformComponent;
 import com.uwsoft.editor.renderer.components.physics.PhysicsBodyComponent;
 import com.uwsoft.editor.renderer.physics.PhysicsBodyLoader;
 import com.uwsoft.editor.renderer.systems.PhysicsSystem;
 import com.uwsoft.editor.renderer.utils.ComponentRetriever;
 import com.uwsoft.editor.renderer.utils.ItemWrapper;
 
+import finnstr.libgdx.liquidfun.ParticleBodyContactListener;
 import finnstr.libgdx.liquidfun.ParticleDebugRenderer;
-import finnstr.libgdx.liquidfun.ParticleDef;
-import finnstr.libgdx.liquidfun.ParticleGroupDef;
 import finnstr.libgdx.liquidfun.ParticleSystem;
 import finnstr.libgdx.liquidfun.ParticleSystemDef;
 
@@ -135,7 +127,8 @@ public class GameScreen implements Screen, InputProcessor {
                 new ShaderProgram(vertexShader, fragmentShader)));
         engine.addSystem(new InventorySystem(hud));
         engine.addSystem(new LiquidSpawnSystem());
-        engine.addSystem(new LiquidDespawnSystem(world, particleSystem));
+        //engine.addSystem(new LiquidDespawnSystem(world, particleSystem));
+        engine.addSystem(new LiquidDetectorSystem(world, particleSystem));
 
         // Add InventoryComponents to all entities marked with "placeable" tag
         for (Entity entity : getEntitiesByTag("placeable")) {
@@ -151,9 +144,19 @@ public class GameScreen implements Screen, InputProcessor {
         }
 
         // Add LiquidDespawnComponents to all entities marker with "liquid_despawn" tag
+//        for (Entity entity : getEntitiesByTag("liquid_despawn")) {
+//            LiquidDespawnComponent liquidDespawn = new LiquidDespawnComponent();
+//            entity.add(liquidDespawn);
+//        }
         for (Entity entity : getEntitiesByTag("liquid_despawn")) {
-            LiquidDespawnComponent liquidDespawn = new LiquidDespawnComponent();
-            entity.add(liquidDespawn);
+            LiquidDetectorComponent despawnDetector = new LiquidDetectorComponent();
+            despawnDetector.destroyOnContact = true;
+            entity.add(despawnDetector);
+        }
+
+        for (Entity entity : getEntitiesByTag("liquid_detector")) {
+            LiquidDetectorComponent detector = new LiquidDetectorComponent();
+            entity.add(detector);
         }
 
         scrollSpeed = viewport.getWorldWidth() / (float)Gdx.graphics.getWidth();
@@ -326,34 +329,18 @@ public class GameScreen implements Screen, InputProcessor {
         switch (pointerCount) {
             case 1: {
                 // If the user touched the HUD
-                if (screenX >= hud.getX() && screenX <= (hud.getX() + hud.getWidth()) &&
-                        screenY >= hud.getY() && screenY <= (hud.getY() + hud.getHeight())) {
+                if (hud.isPointInside(screenX, screenY)) {
 
-                    // Get the correct slot from the position and hence get the associated entity
-                    int entityId = hud.getItemIdFromPosition(screenX, Gdx.graphics.getHeight() - screenY);
-                    if (entityId >= 0) {
-                        // Faster search if iterating on subset rather than iterating over all entities
-                        for (Entity e : engine.getSystem(InventorySystem.class).getEntities()) {
-                            MainItemComponent main = e.getComponent(MainItemComponent.class);
-                            InventoryComponent inventory = e.getComponent(InventoryComponent.class);
-                            PhysicsBodyComponent physicsBody = e.getComponent(PhysicsBodyComponent.class);
+                    Entity entity = getInventoryEntityFromPosition(screenX, screenY);
+                    if (entity != null) {
+                        heldEntity = entity;
 
-                            if (main != null && inventory != null && physicsBody != null && main.uniqueId == entityId) {
-                                heldEntity = e;
+                        moveEntity(heldEntity, screenX, screenY);
 
-                                // Reposition the body before making visible
-                                physicsBody.body.setTransform(
-                                        ViewportUtils.screenToWorldX(viewportCamera, screenX) * WORLD_TO_BOX,
-                                        ViewportUtils.screenToWorldY(viewportCamera, screenY) * WORLD_TO_BOX,
-                                        physicsBody.body.getAngle()
-                                );
-
-                                // Make the entity visible to the user
-                                main.visible = true;
-                                hud.setAlpha(0.25f);
-                                break;
-                            }
-                        }
+                        // Make the entity visible to the user
+                        MainItemComponent main = entity.getComponent(MainItemComponent.class);
+                        main.visible = true;
+                        hud.setAlpha(0.25f);
                     }
                 }
 
@@ -386,13 +373,18 @@ public class GameScreen implements Screen, InputProcessor {
         if (heldEntity != null) {
 
             // If the user touched the HUD
-            if (screenX >= hud.getX() && screenX <= (hud.getX() + hud.getWidth()) &&
-                    screenY >= hud.getY() && screenY <= (hud.getY() + hud.getHeight())) {
+            if (hud.isPointInside(screenX, screenY)) {
                 MainItemComponent main = ComponentRetriever.get(heldEntity, MainItemComponent.class);
                 main.visible = false;
             } else {
-                heldEntity.remove(InventoryComponent.class);
-                heldEntity = null;
+                // Check entity is not being placed on top of another
+                if (!canPlaceEntity(heldEntity, screenX, screenY)) {
+                    MainItemComponent main = ComponentRetriever.get(heldEntity, MainItemComponent.class);
+                    main.visible = false;
+                } else {
+                    heldEntity.remove(InventoryComponent.class);
+                    heldEntity = null;
+                }
             }
 
             hud.setAlpha(1);
@@ -408,12 +400,7 @@ public class GameScreen implements Screen, InputProcessor {
             case 1: {
                 // If there is an entity currently being positioned, move it to pointer position
                 if (heldEntity != null) {
-                    PhysicsBodyComponent physicsBody = ComponentRetriever.get(heldEntity, PhysicsBodyComponent.class);
-                    physicsBody.body.setTransform(
-                            ViewportUtils.screenToWorldX(viewportCamera, screenX) * WORLD_TO_BOX,
-                            ViewportUtils.screenToWorldY(viewportCamera, screenY) * WORLD_TO_BOX,
-                            physicsBody.body.getAngle()
-                    );
+                    moveEntity(heldEntity, screenX, screenY);
                 } else {
                     float deltaX = lastX - Gdx.input.getX(panPointer);
                     float deltaY = Gdx.input.getY(panPointer) - lastY;
@@ -427,6 +414,7 @@ public class GameScreen implements Screen, InputProcessor {
             break;
 
             case 2: {
+                // TODO: What is this line for?
                 if (zoomPointers.size < 2) return true;
 
                 // Get the distance between the two zooming pointers
@@ -460,5 +448,77 @@ public class GameScreen implements Screen, InputProcessor {
     @Override
     public boolean scrolled(int amount) {
         return false;
+    }
+
+    private Entity getInventoryEntityFromPosition(int screenX, int screenY) {
+        // Get the correct slot from the position and hence get the associated entity
+        int entityId = hud.getItemIdFromPosition(screenX, Gdx.graphics.getHeight() - screenY);
+        if (entityId >= 0) {
+
+            // Faster search if iterating on subset rather than iterating over all entities
+            for (Entity e : engine.getSystem(InventorySystem.class).getEntities()) {
+                MainItemComponent main = e.getComponent(MainItemComponent.class);
+                InventoryComponent inventory = e.getComponent(InventoryComponent.class);
+                PhysicsBodyComponent physicsBody = e.getComponent(PhysicsBodyComponent.class);
+
+                if (main != null && inventory != null && physicsBody != null && main.uniqueId == entityId) {
+                    return e;
+                }
+            }
+        }
+        return null;
+    }
+
+    private void moveEntity(Entity entity, int screenX, int screenY) {
+        PhysicsBodyComponent physicsBody = ComponentRetriever.get(entity, PhysicsBodyComponent.class);
+        physicsBody.body.setTransform(
+                ViewportUtils.screenToWorldX(viewportCamera, screenX) * WORLD_TO_BOX,
+                ViewportUtils.screenToWorldY(viewportCamera, screenY) * WORLD_TO_BOX,
+                physicsBody.body.getAngle()
+        );
+    }
+
+    private boolean canPlaceEntity(Entity entity, int screenX, int screenY) {
+        Body body = ComponentRetriever.get(entity, PhysicsBodyComponent.class).body;
+        TransformComponent t = ComponentRetriever.get(entity, TransformComponent.class);
+        DimensionsComponent d = ComponentRetriever.get(entity, DimensionsComponent.class);
+
+        float worldX = ViewportUtils.screenToWorldX(viewportCamera, screenX);
+        float worldY = ViewportUtils.screenToWorldY(viewportCamera, screenY);
+        float lowerX = (worldX - ((d.width * t.scaleX) / 2)) * WORLD_TO_BOX;
+        float lowerY = (worldY - ((d.height * t.scaleY) / 2)) * WORLD_TO_BOX;
+        float upperX = (worldX + ((d.width * t.scaleX) / 2)) * WORLD_TO_BOX;
+        float upperY = (worldY + ((d.height * t.scaleY) / 2)) * WORLD_TO_BOX;
+
+        AreaCallback callback = new AreaCallback(body.getFixtureList().get(0));
+        world.QueryAABB(callback, lowerX, lowerY, upperX, upperY);
+        return !callback.blocked;
+    }
+
+    private class AreaCallback implements QueryCallback {
+
+        private Fixture ignoredFixture;
+        private boolean blocked;
+
+        public AreaCallback(Fixture ignoredFixture) {
+            this.ignoredFixture = ignoredFixture;
+        }
+
+        @Override
+        public boolean reportFixture(Fixture fixture) {
+            if (fixture != ignoredFixture) blocked = true;
+            return true;
+        }
+
+        @Override
+        public boolean reportParticle (ParticleSystem system, int index) {
+            blocked = true;
+            return true;
+        }
+
+        @Override
+        public boolean shouldQueryParticleSystem(ParticleSystem system) {
+            return true;
+        }
     }
 }
