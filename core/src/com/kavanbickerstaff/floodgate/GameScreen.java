@@ -14,10 +14,7 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator;
 import com.badlogic.gdx.graphics.glutils.ShaderProgram;
 import com.badlogic.gdx.math.Vector2;
-import com.badlogic.gdx.physics.box2d.Body;
 import com.badlogic.gdx.physics.box2d.Box2DDebugRenderer;
-import com.badlogic.gdx.physics.box2d.Fixture;
-import com.badlogic.gdx.physics.box2d.QueryCallback;
 import com.badlogic.gdx.physics.box2d.World;
 import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.IntArray;
@@ -25,22 +22,21 @@ import com.badlogic.gdx.utils.viewport.StretchViewport;
 import com.kavanbickerstaff.floodgate.components.InventoryComponent;
 import com.kavanbickerstaff.floodgate.components.LiquidDetectorComponent;
 import com.kavanbickerstaff.floodgate.components.LiquidSpawnComponent;
+import com.kavanbickerstaff.floodgate.components.PlacementComponent;
 import com.kavanbickerstaff.floodgate.systems.CompatibilityPhysicsSystem;
 import com.kavanbickerstaff.floodgate.systems.InventorySystem;
 import com.kavanbickerstaff.floodgate.systems.LiquidDetectorSystem;
 import com.kavanbickerstaff.floodgate.systems.LiquidRenderSystem;
 import com.kavanbickerstaff.floodgate.systems.LiquidSpawnSystem;
+import com.kavanbickerstaff.floodgate.systems.PlacementSystem;
 import com.uwsoft.editor.renderer.SceneLoader;
-import com.uwsoft.editor.renderer.components.DimensionsComponent;
 import com.uwsoft.editor.renderer.components.MainItemComponent;
-import com.uwsoft.editor.renderer.components.TransformComponent;
 import com.uwsoft.editor.renderer.components.physics.PhysicsBodyComponent;
 import com.uwsoft.editor.renderer.physics.PhysicsBodyLoader;
 import com.uwsoft.editor.renderer.systems.PhysicsSystem;
 import com.uwsoft.editor.renderer.utils.ComponentRetriever;
 import com.uwsoft.editor.renderer.utils.ItemWrapper;
 
-import finnstr.libgdx.liquidfun.ParticleBodyContactListener;
 import finnstr.libgdx.liquidfun.ParticleDebugRenderer;
 import finnstr.libgdx.liquidfun.ParticleSystem;
 import finnstr.libgdx.liquidfun.ParticleSystemDef;
@@ -49,8 +45,8 @@ public class GameScreen implements Screen, InputProcessor {
 
     private final Floodgate game;
 
-    private float BOX_TO_WORLD;
-    private float WORLD_TO_BOX;
+    public static float BOX_TO_WORLD;
+    public static float WORLD_TO_BOX;
 
     private static final float ZOOM_IN_LIMIT = 0.75f;
     private static final float ZOOM_OUT_LIMIT = 2.0f;
@@ -127,8 +123,8 @@ public class GameScreen implements Screen, InputProcessor {
                 new ShaderProgram(vertexShader, fragmentShader)));
         engine.addSystem(new InventorySystem(hud));
         engine.addSystem(new LiquidSpawnSystem());
-        //engine.addSystem(new LiquidDespawnSystem(world, particleSystem));
         engine.addSystem(new LiquidDetectorSystem(world, particleSystem));
+        engine.addSystem(new PlacementSystem(world));
 
         // Add InventoryComponents to all entities marked with "placeable" tag
         for (Entity entity : getEntitiesByTag("placeable")) {
@@ -143,17 +139,14 @@ public class GameScreen implements Screen, InputProcessor {
             entity.add(liquidSpawn);
         }
 
-        // Add LiquidDespawnComponents to all entities marker with "liquid_despawn" tag
-//        for (Entity entity : getEntitiesByTag("liquid_despawn")) {
-//            LiquidDespawnComponent liquidDespawn = new LiquidDespawnComponent();
-//            entity.add(liquidDespawn);
-//        }
+        // Add LiquidDetectorComponents to all entities marked with "liquid_despawn" tag
         for (Entity entity : getEntitiesByTag("liquid_despawn")) {
             LiquidDetectorComponent despawnDetector = new LiquidDetectorComponent();
             despawnDetector.destroyOnContact = true;
             entity.add(despawnDetector);
         }
 
+        // Add LiquidDetectorComponents to all entities marked with "liquid_detector" tag
         for (Entity entity : getEntitiesByTag("liquid_detector")) {
             LiquidDetectorComponent detector = new LiquidDetectorComponent();
             entity.add(detector);
@@ -326,22 +319,55 @@ public class GameScreen implements Screen, InputProcessor {
             }
         }
 
+        float worldX = ViewportUtils.screenToWorldX(viewportCamera, screenX);
+        float worldY = ViewportUtils.screenToWorldY(viewportCamera, screenY);
+
         switch (pointerCount) {
             case 1: {
-                // If the user touched the HUD
-                if (hud.isPointInside(screenX, screenY)) {
+                if (heldEntity == null) {
+                    // If player pressed inside the HUD
+                    if (hud.isPointInside(screenX, screenY)) {
 
-                    Entity entity = getInventoryEntityFromPosition(screenX, screenY);
-                    if (entity != null) {
-                        heldEntity = entity;
+                        // Get entity from position in HUD
+                        Entity entity = getInventoryEntityFromPosition(screenX, screenY);
+                        if (entity != null) {
+                            // Remove entity from inventory
+                            entity.remove(InventoryComponent.class);
 
-                        moveEntity(heldEntity, screenX, screenY);
+                            // Make the entity placeable
+                            PlacementComponent placement = new PlacementComponent();
+                            placement.worldX = worldX;
+                            placement.worldY = worldY;
+                            placement.isHeld = true;
+                            entity.add(placement);
 
-                        // Make the entity visible to the user
-                        MainItemComponent main = entity.getComponent(MainItemComponent.class);
-                        main.visible = true;
-                        hud.setAlpha(0.25f);
+                            // Record which entity is currently being held
+                            heldEntity = entity;
+
+                            hud.setAlpha(0.25f);
+                        }
+                    } else {
+
+                        // Find the placeable at the position the player pressed
+                        Entity entity = engine.getSystem(PlacementSystem.class).getPlaceableAt(
+                                worldX, worldY
+                        );
+                        if (entity != null) {
+                            // If entity found, move it to press position
+                            PlacementComponent placement = entity.getComponent(PlacementComponent.class);
+                            placement.worldX = worldX;
+                            placement.worldY = worldY;
+                            placement.isHeld = true;
+
+                            // Record which entity is currently being held
+                            heldEntity = entity;
+                        }
                     }
+                } else {
+                    // Move the currently held entity
+                    PlacementComponent placement = heldEntity.getComponent(PlacementComponent.class);
+                    placement.worldX = worldX;
+                    placement.worldY = worldY;
                 }
 
                 // Make this pointer index the pan pointer
@@ -369,22 +395,20 @@ public class GameScreen implements Screen, InputProcessor {
         // If this pointer was used for panning, swap it for another available pointer
         if (pointer == panPointer && pointerCount >= 1) swapPanPointer();
 
-        // If there is an entity currently being positioned, drop or store it
+        // If an entity is currently being held
         if (heldEntity != null) {
 
-            // If the user touched the HUD
+            // Move the entity to the press position
+            PlacementComponent placement = heldEntity.getComponent(PlacementComponent.class);
+            placement.worldX = ViewportUtils.screenToWorldX(viewportCamera, screenX);
+            placement.worldY = ViewportUtils.screenToWorldY(viewportCamera, screenY);
+
+            // If it was let go inside the HUD, place it in the inventory
             if (hud.isPointInside(screenX, screenY)) {
-                MainItemComponent main = ComponentRetriever.get(heldEntity, MainItemComponent.class);
-                main.visible = false;
+                heldEntity.remove(PlacementComponent.class);
+                heldEntity.add(new InventoryComponent());
             } else {
-                // Check entity is not being placed on top of another
-                if (!canPlaceEntity(heldEntity, screenX, screenY)) {
-                    MainItemComponent main = ComponentRetriever.get(heldEntity, MainItemComponent.class);
-                    main.visible = false;
-                } else {
-                    heldEntity.remove(InventoryComponent.class);
-                    heldEntity = null;
-                }
+                placement.isHeld = false;
             }
 
             hud.setAlpha(1);
@@ -398,9 +422,12 @@ public class GameScreen implements Screen, InputProcessor {
     public boolean touchDragged(int screenX, int screenY, int pointer) {
         switch (pointerCount) {
             case 1: {
-                // If there is an entity currently being positioned, move it to pointer position
                 if (heldEntity != null) {
-                    moveEntity(heldEntity, screenX, screenY);
+                    // If there is an entity currently being positioned, move it to pointer position
+                    PlacementComponent placement = heldEntity.getComponent(PlacementComponent.class);
+                    placement.worldX = ViewportUtils.screenToWorldX(viewportCamera, screenX);
+                    placement.worldY = ViewportUtils.screenToWorldY(viewportCamera, screenY);
+
                 } else {
                     float deltaX = lastX - Gdx.input.getX(panPointer);
                     float deltaY = Gdx.input.getY(panPointer) - lastY;
@@ -467,58 +494,5 @@ public class GameScreen implements Screen, InputProcessor {
             }
         }
         return null;
-    }
-
-    private void moveEntity(Entity entity, int screenX, int screenY) {
-        PhysicsBodyComponent physicsBody = ComponentRetriever.get(entity, PhysicsBodyComponent.class);
-        physicsBody.body.setTransform(
-                ViewportUtils.screenToWorldX(viewportCamera, screenX) * WORLD_TO_BOX,
-                ViewportUtils.screenToWorldY(viewportCamera, screenY) * WORLD_TO_BOX,
-                physicsBody.body.getAngle()
-        );
-    }
-
-    private boolean canPlaceEntity(Entity entity, int screenX, int screenY) {
-        Body body = ComponentRetriever.get(entity, PhysicsBodyComponent.class).body;
-        TransformComponent t = ComponentRetriever.get(entity, TransformComponent.class);
-        DimensionsComponent d = ComponentRetriever.get(entity, DimensionsComponent.class);
-
-        float worldX = ViewportUtils.screenToWorldX(viewportCamera, screenX);
-        float worldY = ViewportUtils.screenToWorldY(viewportCamera, screenY);
-        float lowerX = (worldX - ((d.width * t.scaleX) / 2)) * WORLD_TO_BOX;
-        float lowerY = (worldY - ((d.height * t.scaleY) / 2)) * WORLD_TO_BOX;
-        float upperX = (worldX + ((d.width * t.scaleX) / 2)) * WORLD_TO_BOX;
-        float upperY = (worldY + ((d.height * t.scaleY) / 2)) * WORLD_TO_BOX;
-
-        AreaCallback callback = new AreaCallback(body.getFixtureList().get(0));
-        world.QueryAABB(callback, lowerX, lowerY, upperX, upperY);
-        return !callback.blocked;
-    }
-
-    private class AreaCallback implements QueryCallback {
-
-        private Fixture ignoredFixture;
-        private boolean blocked;
-
-        public AreaCallback(Fixture ignoredFixture) {
-            this.ignoredFixture = ignoredFixture;
-        }
-
-        @Override
-        public boolean reportFixture(Fixture fixture) {
-            if (fixture != ignoredFixture) blocked = true;
-            return true;
-        }
-
-        @Override
-        public boolean reportParticle (ParticleSystem system, int index) {
-            blocked = true;
-            return true;
-        }
-
-        @Override
-        public boolean shouldQueryParticleSystem(ParticleSystem system) {
-            return true;
-        }
     }
 }

@@ -47,7 +47,7 @@ public class LiquidDetectorSystem extends IteratingSystem {
             long bodyAddress = contact.getBody().getAddress();
 
             if (detectorBodyAddresses.contains(bodyAddress)) {
-                Gdx.app.log("DETECTOR", "Body: " + bodyAddress + " Particle: " + contact.getIndex());
+                //Gdx.app.log("DETECTOR", "Body: " + bodyAddress + " Particle: " + contact.getIndex());
             }
 
             if (despawnerBodyAddresses.contains(bodyAddress)) {

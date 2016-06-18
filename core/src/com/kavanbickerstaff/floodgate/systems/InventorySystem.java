@@ -7,15 +7,18 @@ import com.badlogic.ashley.core.EntityListener;
 import com.badlogic.ashley.core.Family;
 import com.badlogic.ashley.systems.IteratingSystem;
 import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.physics.box2d.World;
 import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.IntMap;
 import com.kavanbickerstaff.floodgate.HUD;
+import com.kavanbickerstaff.floodgate.ViewportUtils;
 import com.kavanbickerstaff.floodgate.components.InventoryComponent;
 import com.uwsoft.editor.renderer.components.DimensionsComponent;
 import com.uwsoft.editor.renderer.components.MainItemComponent;
 import com.uwsoft.editor.renderer.components.TextureRegionComponent;
 import com.uwsoft.editor.renderer.components.TransformComponent;
 import com.uwsoft.editor.renderer.components.physics.PhysicsBodyComponent;
+import com.uwsoft.editor.renderer.utils.ComponentRetriever;
 
 import java.util.HashMap;
 
@@ -109,6 +112,7 @@ public class InventorySystem extends IteratingSystem implements EntityListener {
         PhysicsBodyComponent physicsBody = physicsM.get(entity);
         MainItemComponent main = mainM.get(entity);
 
+        // If the item was added and the physics body is still active, deactivate it
         if (itemsByEntityId.containsKey(main.uniqueId) && physicsBody.body.isActive()) {
             physicsBody.body.setActive(false);
         }
