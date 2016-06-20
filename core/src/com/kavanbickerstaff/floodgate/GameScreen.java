@@ -58,7 +58,7 @@ public class GameScreen implements Screen, InputProcessor {
     // When attempting to draw to these black bars, the drawing is clamped to the viewport
     // coordinates.
     private StretchViewport viewport;
-    public static OrthographicCamera viewportCamera;
+    private OrthographicCamera viewportCamera;
     private SceneLoader sceneLoader;
     private Engine engine;
     private World world;

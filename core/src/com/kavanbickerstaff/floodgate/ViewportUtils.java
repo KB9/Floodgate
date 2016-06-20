@@ -5,9 +5,6 @@ import com.badlogic.gdx.math.Vector3;
 
 public class ViewportUtils {
 
-    // TODO: I don't even need the camera to work out the conversions.
-    // The conversion is simply the ratio of world size and screen size.
-
     public static int screenToWorldX(OrthographicCamera camera, int x) {
         return (int)screenToWorld(camera, x, 0).x;
     }

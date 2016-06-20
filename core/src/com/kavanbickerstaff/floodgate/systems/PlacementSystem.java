@@ -37,11 +37,17 @@ public class PlacementSystem extends IteratingSystem {
 
     private World world;
 
+    private FindPlaceableCallback findPlaceableCallback;
+    private CanPlaceCallback canPlaceCallback;
+
     @SuppressWarnings("unchecked")
     public PlacementSystem(World world) {
         super(Family.all(PlacementComponent.class, PhysicsBodyComponent.class).get());
 
         this.world = world;
+
+        findPlaceableCallback = new FindPlaceableCallback();
+        canPlaceCallback = new CanPlaceCallback();
     }
 
     @Override
@@ -91,18 +97,18 @@ public class PlacementSystem extends IteratingSystem {
         }
 
         // Run the query
-        FindPlaceableCallback callback = new FindPlaceableCallback();
         float areaSize = 0.5f;
         float queryLX = (worldX - areaSize) * GameScreen.WORLD_TO_BOX;
         float queryLY = (worldY - areaSize) * GameScreen.WORLD_TO_BOX;
         float queryUX = (worldX + areaSize) * GameScreen.WORLD_TO_BOX;
         float queryUY = (worldY + areaSize) * GameScreen.WORLD_TO_BOX;
-        world.QueryAABB(callback, queryLX, queryLY, queryUX, queryUY);
+        findPlaceableCallback.foundBodies.clear();
+        world.QueryAABB(findPlaceableCallback, queryLX, queryLY, queryUX, queryUY);
 
         // Loop through all placeable entities to find out if one was found by the query
         for (Entity entity : getEntities()) {
             PhysicsBodyComponent physicsBody = physicsM.get(entity);
-            if (callback.foundBodies.contains(physicsBody.body, true)) {
+            if (findPlaceableCallback.foundBodies.contains(physicsBody.body, true)) {
 
                 // Deactivate all bodies that were temporarily activated
                 for (Body body : activatedBodies) {
@@ -135,7 +141,6 @@ public class PlacementSystem extends IteratingSystem {
     }
 
     private boolean isRayCastBlocked(float[] vertices) {
-        CanPlaceCallback callback = new CanPlaceCallback();
         Vector2 start = new Vector2();
         Vector2 end = new Vector2();
 
@@ -146,8 +151,9 @@ public class PlacementSystem extends IteratingSystem {
                 end.set(vertices[j], vertices[j + 1]);
 
                 // If the ray cast comes into contact with any fixture, return true
-                world.rayCast(callback, start.cpy().scl(GameScreen.WORLD_TO_BOX), end.cpy().scl(GameScreen.WORLD_TO_BOX));
-                if (callback.blocked) return true;
+                canPlaceCallback.blocked = false;
+                world.rayCast(canPlaceCallback, start.cpy().scl(GameScreen.WORLD_TO_BOX), end.cpy().scl(GameScreen.WORLD_TO_BOX));
+                if (canPlaceCallback.blocked) return true;
             }
         }
 

@@ -7,8 +7,10 @@ import finnstr.libgdx.liquidfun.ParticleSystem;
 
 public class CompatibilityPhysicsSystem extends PhysicsSystem {
 
+    private final float TIME_STEP = 1f/60;
     private World world;
     private boolean isPhysicsOn = true;
+    private float accumulator = 0;
 
     private ParticleSystem particleSystem;
 
@@ -33,11 +35,15 @@ public class CompatibilityPhysicsSystem extends PhysicsSystem {
         }
 
         if (world != null && isPhysicsOn) {
-            // This has changed substantially from the old PhysicsSystem in which they
-            // were using a fixed time-step. This step() seems to simulate particles
-            // best. Refer to PhysicsSystem for old code.
-            world.step(deltaTime, 10, 6,
-                    particleSystem.calculateReasonableParticleIterations(deltaTime));
+            float frameTime = Math.min(deltaTime, 0.25f);
+            accumulator += frameTime;
+            while (accumulator >= TIME_STEP) {
+//                world.step(deltaTime, 10, 6,
+//                        particleSystem.calculateReasonableParticleIterations(deltaTime));
+                world.step(TIME_STEP, 10, 6,
+                        particleSystem.calculateReasonableParticleIterations(frameTime));
+                accumulator -= TIME_STEP;
+            }
         }
     }
 

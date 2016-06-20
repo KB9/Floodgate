@@ -4,7 +4,6 @@ import com.badlogic.ashley.core.Component;
 
 public class LiquidDetectorComponent implements Component {
 
+    public int particleCount;
     public boolean destroyOnContact;
-
-    // TODO: Will eventually have particle counts in here to calculate score bands
 }

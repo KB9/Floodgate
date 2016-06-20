@@ -48,7 +48,7 @@ public class LiquidRenderSystem extends IteratingSystem implements EntityListene
         this.shader = shader;
 
         batch = new SpriteBatch();
-        fbo = new FrameBuffer(Pixmap.Format.RGBA8888,
+        fbo = new FrameBuffer(Pixmap.Format.RGB888,
                 Gdx.graphics.getWidth(), Gdx.graphics.getHeight(), false);
 
         BOX_TO_WORLD = 1f / PhysicsBodyLoader.getScale();
