@@ -4,14 +4,23 @@ import com.badlogic.ashley.core.ComponentMapper;
 import com.badlogic.ashley.core.Entity;
 import com.badlogic.ashley.core.Family;
 import com.badlogic.ashley.systems.IteratingSystem;
+import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.graphics.Texture;
+import com.badlogic.gdx.graphics.g2d.SpriteBatch;
+import com.badlogic.gdx.math.Polygon;
+import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.physics.box2d.Body;
 import com.badlogic.gdx.physics.box2d.Fixture;
 import com.badlogic.gdx.physics.box2d.QueryCallback;
+import com.badlogic.gdx.physics.box2d.RayCastCallback;
 import com.badlogic.gdx.physics.box2d.World;
 import com.badlogic.gdx.utils.Array;
 import com.kavanbickerstaff.floodgate.GameScreen;
+import com.kavanbickerstaff.floodgate.ViewportUtils;
 import com.kavanbickerstaff.floodgate.components.PlacementComponent;
 import com.uwsoft.editor.renderer.components.DimensionsComponent;
+import com.uwsoft.editor.renderer.components.PolygonComponent;
+import com.uwsoft.editor.renderer.components.TintComponent;
 import com.uwsoft.editor.renderer.components.TransformComponent;
 import com.uwsoft.editor.renderer.components.physics.PhysicsBodyComponent;
 
@@ -23,6 +32,8 @@ public class PlacementSystem extends IteratingSystem {
     private ComponentMapper<PhysicsBodyComponent> physicsM = ComponentMapper.getFor(PhysicsBodyComponent.class);
     private ComponentMapper<TransformComponent> transformM = ComponentMapper.getFor(TransformComponent.class);
     private ComponentMapper<DimensionsComponent> dimensionsM = ComponentMapper.getFor(DimensionsComponent.class);
+    private ComponentMapper<TintComponent> tintM = ComponentMapper.getFor(TintComponent.class);
+    private ComponentMapper<PolygonComponent> polygonM = ComponentMapper.getFor(PolygonComponent.class);
 
     private World world;
 
@@ -37,6 +48,7 @@ public class PlacementSystem extends IteratingSystem {
     protected void processEntity(Entity entity, float deltaTime) {
         PlacementComponent placement = placementM.get(entity);
         PhysicsBodyComponent physicsBody = physicsM.get(entity);
+        TintComponent tint = tintM.get(entity);
 
         // If the physics body is active, deactivate it
         if (physicsBody.body.isActive()) {
@@ -50,21 +62,19 @@ public class PlacementSystem extends IteratingSystem {
                 physicsBody.body.getAngle()
         );
 
+        // Mark and add color changes for valid/invalid positions
+        if (canPlaceEntity(entity, placement.worldX, placement.worldY)) {
+            placement.hasInvalidPosition = false;
+            tint.color.set(1, 1, 1, 1);
+        } else {
+            placement.hasInvalidPosition = true;
+            tint.color.set(1, 0, 0, 0.5f);
+        }
+
         // If the entity is no longer held and its position has not been marked as invalid
         if (!placement.isHeld && !placement.hasInvalidPosition) {
-            // Check that area in which it was placed is unobstructed
-            if (canPlaceEntity(entity, placement.worldX, placement.worldY)) {
-                // Activate physics on the body and remove placement component
-                physicsBody.body.setActive(true);
-                entity.remove(PlacementComponent.class);
-            } else {
-                // Entity cannot be placed therefore its position is invalid
-                placement.hasInvalidPosition = true;
-            }
-
-        } else if (placement.isHeld && placement.hasInvalidPosition) {
-            // If it is held, remove its invalid position flag
-            placement.hasInvalidPosition = false;
+            physicsBody.body.setActive(true);
+            entity.remove(PlacementComponent.class);
         }
     }
 
@@ -114,23 +124,39 @@ public class PlacementSystem extends IteratingSystem {
     private boolean canPlaceEntity(Entity entity, float worldX, float worldY) {
         TransformComponent t = transformM.get(entity);
         DimensionsComponent d = dimensionsM.get(entity);
-        PhysicsBodyComponent p = physicsM.get(entity);
+        PolygonComponent p = polygonM.get(entity);
 
-        // TODO: Unsure as to the correctness of this calculation.
-        // TODO: Seems to struggle with rotated physics bodies.
-        float lowerX = (worldX - ((d.width * t.scaleX) / 2)) * GameScreen.WORLD_TO_BOX;
-        float lowerY = (worldY - ((d.height * t.scaleY) / 2)) * GameScreen.WORLD_TO_BOX;
-        float upperX = (worldX + ((d.width * t.scaleX) / 2)) * GameScreen.WORLD_TO_BOX;
-        float upperY = (worldY + ((d.height * t.scaleY) / 2)) * GameScreen.WORLD_TO_BOX;
+        if (d.polygon == null) d.setPolygon(p);
+        d.polygon.setPosition(worldX - ((d.width * t.scaleX) / 2), worldY - ((d.height * t.scaleY) / 2));
+        d.polygon.setRotation(t.rotation);
+        d.polygon.setScale(t.scaleX, t.scaleY);
 
+        return !isRayCastBlocked(d.polygon.getTransformedVertices());
+    }
+
+    private boolean isRayCastBlocked(float[] vertices) {
         CanPlaceCallback callback = new CanPlaceCallback();
-        world.QueryAABB(callback, lowerX, lowerY, upperX, upperY);
-        return !callback.blocked;
+        Vector2 start = new Vector2();
+        Vector2 end = new Vector2();
+
+        // Ray cast between all vertices
+        for (int i = 0; i < vertices.length; i+= 2) {
+            start.set(vertices[i], vertices[i + 1]);
+            for (int j = (i + 2); j < vertices.length; j += 2) {
+                end.set(vertices[j], vertices[j + 1]);
+
+                // If the ray cast comes into contact with any fixture, return true
+                world.rayCast(callback, start.cpy().scl(GameScreen.WORLD_TO_BOX), end.cpy().scl(GameScreen.WORLD_TO_BOX));
+                if (callback.blocked) return true;
+            }
+        }
+
+        return false;
     }
 
     /**
      * Query callback that saves all bodies that it reports. Ignores particles.
-     * Slower compared to AreaCallback
+     * It is an AABB test, therefore it detects bounding boxes and not fixture shapes.
      */
     private class FindPlaceableCallback implements QueryCallback {
 
@@ -154,29 +180,27 @@ public class PlacementSystem extends IteratingSystem {
     }
 
     /**
-     * Query callback that detects fixtures and particles and stops reporting after the
-     * first report, and sets its blocked flag.
-     * Faster compared to FindPlaceableCallback.
+     * Query callback that detects fixtures and stops reporting after the first report, and
+     * sets its blocked flag.
      */
-    private class CanPlaceCallback implements QueryCallback {
+    private class CanPlaceCallback implements RayCastCallback {
 
-        private boolean blocked;
+        public boolean blocked;
 
         @Override
-        public boolean reportFixture(Fixture fixture) {
+        public float reportRayFixture(Fixture fixture, Vector2 point, Vector2 normal, float fraction) {
             blocked = true;
-            return false;
+            return 0;
         }
 
         @Override
-        public boolean reportParticle (ParticleSystem system, int index) {
-            blocked = true;
-            return true;
+        public float reportRayParticle(ParticleSystem system, int index, Vector2 point, Vector2 normal, float fraction) {
+            return 0;
         }
 
         @Override
         public boolean shouldQueryParticleSystem(ParticleSystem system) {
-            return true;
+            return false;
         }
     }
 }

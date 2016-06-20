@@ -58,7 +58,7 @@ public class GameScreen implements Screen, InputProcessor {
     // When attempting to draw to these black bars, the drawing is clamped to the viewport
     // coordinates.
     private StretchViewport viewport;
-    private OrthographicCamera viewportCamera;
+    public static OrthographicCamera viewportCamera;
     private SceneLoader sceneLoader;
     private Engine engine;
     private World world;
@@ -441,7 +441,7 @@ public class GameScreen implements Screen, InputProcessor {
             break;
 
             case 2: {
-                // TODO: What is this line for?
+                // If the number of zoom pointers is not 2, no zooming should be performed.
                 if (zoomPointers.size < 2) return true;
 
                 // Get the distance between the two zooming pointers
