@@ -6,15 +6,29 @@ filter: Linear,Linear
 repeat: none
 box
   rotate: false
-  xy: 2, 68
+  xy: 2, 149
   size: 255, 256
   orig: 255, 256
   offset: 0, 0
   index: -1
 brickblock
   rotate: false
+  xy: 259, 341
+  size: 64, 64
+  orig: 64, 64
+  offset: 0, 0
+  index: -1
+pipe
+  rotate: false
   xy: 2, 2
   size: 64, 64
   orig: 64, 64
+  offset: 0, 0
+  index: -1
+rat
+  rotate: false
+  xy: 2, 68
+  size: 86, 79
+  orig: 86, 79
   offset: 0, 0
   index: -1

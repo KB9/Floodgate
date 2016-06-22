@@ -15,6 +15,7 @@ import com.badlogic.gdx.physics.box2d.Fixture;
 import com.badlogic.gdx.physics.box2d.Manifold;
 import com.badlogic.gdx.physics.box2d.QueryCallback;
 import com.badlogic.gdx.physics.box2d.World;
+import com.badlogic.gdx.utils.IntArray;
 import com.badlogic.gdx.utils.LongArray;
 import com.kavanbickerstaff.floodgate.GameScreen;
 import com.kavanbickerstaff.floodgate.components.LiquidDetectorComponent;
@@ -29,87 +30,22 @@ import finnstr.libgdx.liquidfun.ParticleSystem;
 public class LiquidDetectorSystem extends IteratingSystem {
 
     private ComponentMapper<LiquidDetectorComponent> detectorM = ComponentMapper.getFor(LiquidDetectorComponent.class);
-    private ComponentMapper<PhysicsBodyComponent> physicsM = ComponentMapper.getFor(PhysicsBodyComponent.class);
     private ComponentMapper<TransformComponent> transformM = ComponentMapper.getFor(TransformComponent.class);
     private ComponentMapper<DimensionsComponent> dimensionsM = ComponentMapper.getFor(DimensionsComponent.class);
 
-    private class ParticleContactResolver implements ContactListener {
-
-        /** Called when two fixtures begin to touch. */
-        @Override
-        public void beginContact(Contact contact) {
-
-        }
-
-        /** Called when two fixtures cease to touch. */
-        @Override
-        public void endContact(Contact contact) {
-
-        }
-
-        /** Called when a particle and a fixture begin to touch. */
-        @Override
-        public void beginParticleBodyContact(ParticleSystem system, ParticleBodyContact contact) {
-            long bodyAddress = contact.getBody().getAddress();
-
-            // TODO: Start working from here once I get a solution from finnstr
-//            if (detectorBodyAddresses.contains(bodyAddress)) {
-//
-//            }
-
-            if (despawnerBodyAddresses.contains(bodyAddress)) {
-                system.destroyParticle(contact.getIndex());
-            }
-        }
-
-        /** Called when a particle and a fixture cease to touch. */
-        @Override
-        public void endParticleBodyContact(Fixture fixture, ParticleSystem system, int index) {
-
-        }
-
-        /** Called when two particles begin to touch. */
-        @Override
-        public void beginParticleContact(ParticleSystem system, ParticleContact contact) {
-
-        }
-
-        /** Called when two particles cease to touch. */
-        @Override
-        public void endParticleContact(ParticleSystem system, int indexA, int indexB) {
-
-        }
-
-        @Override
-        public void preSolve(Contact contact, Manifold oldManifold) {
-
-        }
-
-        @Override
-        public void postSolve(Contact contact, ContactImpulse impulse) {
-
-        }
-    }
-
     private World world;
+    private ParticleSystem particleSystem;
 
-    private LongArray detectorBodyAddresses;
-    private LongArray despawnerBodyAddresses;
-
-    private FindParticlesCallback findParticlesCallback;
+    private FindParticlesCallback callback;
 
     @SuppressWarnings("unchecked")
     public LiquidDetectorSystem(World world, ParticleSystem particleSystem) {
-        super(Family.all(LiquidDetectorComponent.class,
-                PhysicsBodyComponent.class).get());
+        super(Family.all(LiquidDetectorComponent.class).get());
 
         this.world = world;
-        world.setContactListener(new ParticleContactResolver());
+        this.particleSystem = particleSystem;
 
-        detectorBodyAddresses = new LongArray();
-        despawnerBodyAddresses = new LongArray();
-
-        findParticlesCallback = new FindParticlesCallback();
+        callback = new FindParticlesCallback();
     }
 
     @Override
@@ -120,43 +56,41 @@ public class LiquidDetectorSystem extends IteratingSystem {
     @Override
     protected void processEntity(Entity entity, float deltaTime) {
         LiquidDetectorComponent detector = detectorM.get(entity);
-        PhysicsBodyComponent physicsBody = physicsM.get(entity);
         TransformComponent transform = transformM.get(entity);
         DimensionsComponent dimensions = dimensionsM.get(entity);
 
-        long bodyAddress = physicsBody.body.getAddress();
+        callback.reset();
 
-        if (!detectorBodyAddresses.contains(bodyAddress)) {
-            detectorBodyAddresses.add(bodyAddress);
+        float worldX = transform.x;
+        float worldY = transform.y;
+        float worldWidth = dimensions.width * transform.scaleX;
+        float worldHeight = dimensions.height * transform.scaleY;
 
-            // TODO: Temporary until finnstr provides me with a solution
-            if (!detector.destroyOnContact) physicsBody.body.setActive(false);
-        }
+        float queryLX = worldX * GameScreen.WORLD_TO_BOX;
+        float queryLY = worldY * GameScreen.WORLD_TO_BOX;
+        float queryUX = (worldX + worldWidth) * GameScreen.WORLD_TO_BOX;
+        float queryUY = (worldY + worldHeight) * GameScreen.WORLD_TO_BOX;
+        world.QueryAABB(callback, queryLX, queryLY, queryUX, queryUY);
 
-        if (detector.destroyOnContact && !despawnerBodyAddresses.contains(bodyAddress)) {
-            despawnerBodyAddresses.add(bodyAddress);
-        }
+        detector.particleCount = callback.particleIndices.size;
+        detector.totalParticleCount += callback.particleIndices.size;
 
-        // TODO: Temporary until finnstr provides me with a solution
-        if (detectorBodyAddresses.contains(bodyAddress)) {
-            float worldX = physicsBody.body.getPosition().x * GameScreen.BOX_TO_WORLD;
-            float worldY = physicsBody.body.getPosition().y * GameScreen.BOX_TO_WORLD;
-            float halfWidth = (dimensions.width * transform.scaleX) / 2;
-            float halfHeight = (dimensions.height * transform.scaleY) / 2;
-
-            float queryLX = (worldX - halfWidth) * GameScreen.WORLD_TO_BOX;
-            float queryLY = (worldY - halfHeight) * GameScreen.WORLD_TO_BOX;
-            float queryUX = (worldX + halfWidth) * GameScreen.WORLD_TO_BOX;
-            float queryUY = (worldY + halfHeight) * GameScreen.WORLD_TO_BOX;
-            world.QueryAABB(findParticlesCallback, queryLX, queryLY, queryUX, queryUY);
-
-            detector.particleCount = findParticlesCallback.particleCount;
+        if (detector.destroyParticles) {
+            int count = callback.particleIndices.size;
+            for (int i = 0; i < count; i++) {
+                int particleIndex = callback.particleIndices.get(i);
+                particleSystem.destroyParticle(particleIndex);
+            }
         }
     }
 
     private class FindParticlesCallback implements QueryCallback {
 
-        private int particleCount;
+        private IntArray particleIndices = new IntArray();
+
+        public void reset() {
+            particleIndices.clear();
+        }
 
         @Override
         public boolean reportFixture(Fixture fixture) {
@@ -165,7 +99,7 @@ public class LiquidDetectorSystem extends IteratingSystem {
 
         @Override
         public boolean reportParticle (ParticleSystem system, int index) {
-            particleCount++;
+            particleIndices.add(index);
             return true;
         }
 

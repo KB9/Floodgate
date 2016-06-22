@@ -48,9 +48,9 @@ public class GameScreen implements Screen, InputProcessor {
     public static float BOX_TO_WORLD;
     public static float WORLD_TO_BOX;
 
-    private static final float ZOOM_IN_LIMIT = 0.75f;
-    private static final float ZOOM_OUT_LIMIT = 2.0f;
-    private static final float ZOOM_MODIFIER = 0.005f;
+//    private static final float ZOOM_IN_LIMIT = 0.75f;
+//    private static final float ZOOM_OUT_LIMIT = 2.0f;
+//    private static final float ZOOM_MODIFIER = 0.005f;
 
     // TODO: Moved from FitViewport to StretchViewport.
     // Viewport seems to affect SpriteBatch drawing coordinates. For example,
@@ -72,13 +72,16 @@ public class GameScreen implements Screen, InputProcessor {
 
     private HUD hud;
 
-    private int lastX, lastY;
-    private int pointerCount;
-    private boolean[] activePointers = new boolean[20];
-    private int panPointer;
-    private float scrollSpeed;
-    private IntArray zoomPointers = new IntArray();
-    private float lastDistance;
+//    private int lastX, lastY;
+//    private int pointerCount;
+//    private boolean[] activePointers = new boolean[20];
+//    private int panPointer;
+//    private float scrollSpeed;
+//    private IntArray zoomPointers = new IntArray();
+//    private float lastDistance;
+    private CameraController cameraController;
+
+    private Texture startTexture;
 
     private BitmapFont font;
 
@@ -116,11 +119,13 @@ public class GameScreen implements Screen, InputProcessor {
         // Inject modified PhysicsSystem to handle particles
         engine.removeSystem(engine.getSystem(PhysicsSystem.class));
         engine.addSystem(new CompatibilityPhysicsSystem(world, particleSystem));
+
         String vertexShader = Gdx.files.internal("water_shader.vert").readString();
         String fragmentShader = Gdx.files.internal("water_shader.frag").readString();
         engine.addSystem(new LiquidRenderSystem(viewportCamera, particleSystem,
                 new Texture(Gdx.files.internal("water_particle_alpha_64.png")),
                 new ShaderProgram(vertexShader, fragmentShader)));
+
         engine.addSystem(new InventorySystem(hud));
         engine.addSystem(new LiquidSpawnSystem());
         engine.addSystem(new LiquidDetectorSystem(world, particleSystem));
@@ -142,7 +147,7 @@ public class GameScreen implements Screen, InputProcessor {
         // Add LiquidDetectorComponents to all entities marked with "liquid_despawn" tag
         for (Entity entity : getEntitiesByTag("liquid_despawn")) {
             LiquidDetectorComponent despawnDetector = new LiquidDetectorComponent();
-            despawnDetector.destroyOnContact = true;
+            despawnDetector.destroyParticles = true;
             entity.add(despawnDetector);
         }
 
@@ -152,10 +157,12 @@ public class GameScreen implements Screen, InputProcessor {
             entity.add(detector);
         }
 
-        scrollSpeed = viewport.getWorldWidth() / (float)Gdx.graphics.getWidth();
+        //scrollSpeed = viewport.getWorldWidth() / (float)Gdx.graphics.getWidth();
 
         batch = new SpriteBatch();
         backgroundTexture = new Texture(Gdx.files.internal("sewer_background.png"));
+
+        startTexture = new Texture(Gdx.files.internal("start_button.png"));
 
         // FreeType font initialization
         FreeTypeFontGenerator fontGenerator = new FreeTypeFontGenerator(Gdx.files.internal("fonts/arial.ttf"));
@@ -168,6 +175,12 @@ public class GameScreen implements Screen, InputProcessor {
         debugRenderer = new Box2DDebugRenderer();
         particleDebugRenderer = new ParticleDebugRenderer(new Color(0, 1, 0, 1),
                 1000000);
+
+        // Camera controller setup
+        cameraController = new CameraController(viewportCamera);
+        cameraController.setScrollSpeed(viewport.getWorldWidth() / (float)Gdx.graphics.getWidth());
+        cameraController.setZoomLimits(0.75f, 2.0f);
+        cameraController.setZoomSpeed(0.005f);
     }
 
     @Override
@@ -196,10 +209,12 @@ public class GameScreen implements Screen, InputProcessor {
         hud.render();
 
         batch.begin();
+        batch.draw(startTexture, 0, 0, 200, 200);
+
         font.draw(batch, "FPS: " + Gdx.graphics.getFramesPerSecond(), 0, Gdx.graphics.getHeight());
         font.draw(batch, "Particles: " + debugParticleSystem.getParticleCount(), 0, Gdx.graphics.getHeight() - (font.getCapHeight() + 10));
         font.draw(batch, "Entities: " + engine.getEntities().size(), 0, Gdx.graphics.getHeight() - (font.getCapHeight() + 10) * 2);
-        font.draw(batch, "Pointers: "  + pointerCount, 0, Gdx.graphics.getHeight() - (font.getCapHeight() + 10) * 3);
+        font.draw(batch, "Pointers: "  + cameraController.getPointerCount(), 0, Gdx.graphics.getHeight() - (font.getCapHeight() + 10) * 3);
         batch.end();
     }
 
@@ -261,31 +276,6 @@ public class GameScreen implements Screen, InputProcessor {
         return null;
     }
 
-    private void swapPanPointer() {
-        for (int i = 0; i < 20; i++) {
-            if (activePointers[i]) {
-                panPointer = i;
-                lastX = Gdx.input.getX(i);
-                lastY = Gdx.input.getY(i);
-                break;
-            }
-        }
-    }
-
-    private void swapZoomPointer(int pointer) {
-        for (int i = 0; i < 20; i++) {
-            if (activePointers[i] && !zoomPointers.contains(i)) {
-                zoomPointers.set(zoomPointers.indexOf(pointer), i);
-
-                lastDistance = Vector2.dst(
-                        Gdx.input.getX(zoomPointers.get(0)), Gdx.input.getY(zoomPointers.get(0)),
-                        Gdx.input.getX(zoomPointers.get(1)), Gdx.input.getY(zoomPointers.get(1))
-                );
-                break;
-            }
-        }
-    }
-
     @Override
     public boolean keyDown(int keycode) {
         return false;
@@ -303,26 +293,12 @@ public class GameScreen implements Screen, InputProcessor {
 
     @Override
     public boolean touchDown(int screenX, int screenY, int pointer, int button) {
-        activePointers[pointer] = true;
-        pointerCount++;
-
-        // If there is space for another zoom pointer, use the current pointer index
-        if (zoomPointers.size < 2) {
-            zoomPointers.add(pointer);
-
-            // If two zoom pointers have now been added, calculated the distance between them
-            if (zoomPointers.size == 2) {
-                lastDistance = Vector2.dst(
-                        Gdx.input.getX(zoomPointers.get(0)), Gdx.input.getY(zoomPointers.get(0)),
-                        Gdx.input.getX(zoomPointers.get(1)), Gdx.input.getY(zoomPointers.get(1))
-                );
-            }
-        }
+        cameraController.touchDown(screenX, screenY, pointer);
 
         float worldX = ViewportUtils.screenToWorldX(viewportCamera, screenX);
         float worldY = ViewportUtils.screenToWorldY(viewportCamera, screenY);
 
-        switch (pointerCount) {
+        switch (cameraController.getPointerCount()) {
             case 1: {
                 if (heldEntity == null) {
                     // If player pressed inside the HUD
@@ -369,11 +345,6 @@ public class GameScreen implements Screen, InputProcessor {
                     placement.worldX = worldX;
                     placement.worldY = worldY;
                 }
-
-                // Make this pointer index the pan pointer
-                panPointer = pointer;
-                lastX = screenX;
-                lastY = screenY;
             }
             break;
         }
@@ -383,17 +354,7 @@ public class GameScreen implements Screen, InputProcessor {
 
     @Override
     public boolean touchUp(int screenX, int screenY, int pointer, int button) {
-        activePointers[pointer] = false;
-        pointerCount--;
-
-        // If this pointer was used for zooming, swap it for another available pointer
-        if (zoomPointers.contains(pointer)) {
-            if (pointerCount > 1) swapZoomPointer(pointer);
-            zoomPointers.removeValue(pointer);
-        }
-
-        // If this pointer was used for panning, swap it for another available pointer
-        if (pointer == panPointer && pointerCount >= 1) swapPanPointer();
+        cameraController.touchUp(screenX, screenY, pointer);
 
         // If an entity is currently being held
         if (heldEntity != null) {
@@ -420,7 +381,7 @@ public class GameScreen implements Screen, InputProcessor {
 
     @Override
     public boolean touchDragged(int screenX, int screenY, int pointer) {
-        switch (pointerCount) {
+        switch (cameraController.getPointerCount()) {
             case 1: {
                 if (heldEntity != null) {
                     // If there is an entity currently being positioned, move it to pointer position
@@ -429,40 +390,15 @@ public class GameScreen implements Screen, InputProcessor {
                     placement.worldY = ViewportUtils.screenToWorldY(viewportCamera, screenY);
 
                 } else {
-                    float deltaX = lastX - Gdx.input.getX(panPointer);
-                    float deltaY = Gdx.input.getY(panPointer) - lastY;
-                    viewportCamera.position.add(
-                            deltaX * scrollSpeed * viewportCamera.zoom,
-                            deltaY * scrollSpeed * viewportCamera.zoom,
-                            0
-                    );
+                    // Else just move the camera
+                    cameraController.touchDragged(screenX, screenY, pointer);
                 }
             }
             break;
-
-            case 2: {
-                // If the number of zoom pointers is not 2, no zooming should be performed.
-                if (zoomPointers.size < 2) return true;
-
-                // Get the distance between the two zooming pointers
-                float distance = Vector2.dst(
-                        Gdx.input.getX(zoomPointers.get(0)), Gdx.input.getY(zoomPointers.get(0)),
-                        Gdx.input.getX(zoomPointers.get(1)), Gdx.input.getY(zoomPointers.get(1))
-                );
-
-                // Move the camera by the calculated delta
-                float delta = (lastDistance - distance) * ZOOM_MODIFIER;
-                viewportCamera.zoom += delta;
-                if (viewportCamera.zoom < ZOOM_IN_LIMIT) viewportCamera.zoom = ZOOM_IN_LIMIT;
-                if (viewportCamera.zoom > ZOOM_OUT_LIMIT) viewportCamera.zoom = ZOOM_OUT_LIMIT;
-
-                lastDistance = distance;
+            default: {
+                cameraController.touchDragged(screenX, screenY, pointer);
             }
         }
-
-        // Record the last position of the panning pointer
-        lastX = Gdx.input.getX(panPointer);
-        lastY = Gdx.input.getY(panPointer);
 
         return true;
     }
