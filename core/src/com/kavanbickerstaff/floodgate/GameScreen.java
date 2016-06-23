@@ -19,11 +19,13 @@ import com.badlogic.gdx.physics.box2d.World;
 import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.IntArray;
 import com.badlogic.gdx.utils.viewport.StretchViewport;
+import com.kavanbickerstaff.floodgate.components.ContactListenerComponent;
 import com.kavanbickerstaff.floodgate.components.InventoryComponent;
 import com.kavanbickerstaff.floodgate.components.LiquidDetectorComponent;
 import com.kavanbickerstaff.floodgate.components.LiquidSpawnComponent;
 import com.kavanbickerstaff.floodgate.components.PlacementComponent;
 import com.kavanbickerstaff.floodgate.systems.CompatibilityPhysicsSystem;
+import com.kavanbickerstaff.floodgate.systems.ContactListenerSystem;
 import com.kavanbickerstaff.floodgate.systems.InventorySystem;
 import com.kavanbickerstaff.floodgate.systems.LiquidDetectorSystem;
 import com.kavanbickerstaff.floodgate.systems.LiquidRenderSystem;
@@ -48,10 +50,6 @@ public class GameScreen implements Screen, InputProcessor {
     public static float BOX_TO_WORLD;
     public static float WORLD_TO_BOX;
 
-//    private static final float ZOOM_IN_LIMIT = 0.75f;
-//    private static final float ZOOM_OUT_LIMIT = 2.0f;
-//    private static final float ZOOM_MODIFIER = 0.005f;
-
     // TODO: Moved from FitViewport to StretchViewport.
     // Viewport seems to affect SpriteBatch drawing coordinates. For example,
     // when I use FitViewport(800,480), black bars appear at the sides of the screen.
@@ -72,17 +70,9 @@ public class GameScreen implements Screen, InputProcessor {
 
     private HUD hud;
 
-//    private int lastX, lastY;
-//    private int pointerCount;
-//    private boolean[] activePointers = new boolean[20];
-//    private int panPointer;
-//    private float scrollSpeed;
-//    private IntArray zoomPointers = new IntArray();
-//    private float lastDistance;
     private CameraController cameraController;
 
     private Texture startTexture;
-
     private BitmapFont font;
 
     private Entity heldEntity;
@@ -130,34 +120,9 @@ public class GameScreen implements Screen, InputProcessor {
         engine.addSystem(new LiquidSpawnSystem());
         engine.addSystem(new LiquidDetectorSystem(world, particleSystem));
         engine.addSystem(new PlacementSystem(world));
+        engine.addSystem(new ContactListenerSystem(world));
 
-        // Add InventoryComponents to all entities marked with "placeable" tag
-        for (Entity entity : getEntitiesByTag("placeable")) {
-            entity.add(new InventoryComponent());
-        }
-
-        // Add LiquidSpawnComponents to all entities marker with "liquid_spawn" tag
-        for (Entity entity : getEntitiesByTag("liquid_spawn")) {
-            LiquidSpawnComponent liquidSpawn = new LiquidSpawnComponent();
-            liquidSpawn.on = true;
-            liquidSpawn.spawnTimeMillis = 5000;
-            entity.add(liquidSpawn);
-        }
-
-        // Add LiquidDetectorComponents to all entities marked with "liquid_despawn" tag
-        for (Entity entity : getEntitiesByTag("liquid_despawn")) {
-            LiquidDetectorComponent despawnDetector = new LiquidDetectorComponent();
-            despawnDetector.destroyParticles = true;
-            entity.add(despawnDetector);
-        }
-
-        // Add LiquidDetectorComponents to all entities marked with "liquid_detector" tag
-        for (Entity entity : getEntitiesByTag("liquid_detector")) {
-            LiquidDetectorComponent detector = new LiquidDetectorComponent();
-            entity.add(detector);
-        }
-
-        //scrollSpeed = viewport.getWorldWidth() / (float)Gdx.graphics.getWidth();
+        addComponentsByTags();
 
         batch = new SpriteBatch();
         backgroundTexture = new Texture(Gdx.files.internal("sewer_background.png"));
@@ -411,6 +376,39 @@ public class GameScreen implements Screen, InputProcessor {
     @Override
     public boolean scrolled(int amount) {
         return false;
+    }
+
+    private void addComponentsByTags() {
+        // Add InventoryComponents to all entities marked with "placeable" tag
+        for (Entity entity : getEntitiesByTag("placeable")) {
+            entity.add(new InventoryComponent());
+        }
+
+        // Add LiquidSpawnComponents to all entities marker with "liquid_spawn" tag
+        for (Entity entity : getEntitiesByTag("liquid_spawn")) {
+            LiquidSpawnComponent liquidSpawn = new LiquidSpawnComponent();
+            liquidSpawn.on = true;
+            liquidSpawn.spawnTimeMillis = 5000;
+            entity.add(liquidSpawn);
+        }
+
+        // Add LiquidDetectorComponents to all entities marked with "liquid_despawn" tag
+        for (Entity entity : getEntitiesByTag("liquid_despawn")) {
+            LiquidDetectorComponent despawnDetector = new LiquidDetectorComponent();
+            despawnDetector.destroyParticles = true;
+            entity.add(despawnDetector);
+        }
+
+        // Add LiquidDetectorComponents to all entities marked with "liquid_detector" tag
+        for (Entity entity : getEntitiesByTag("liquid_detector")) {
+            LiquidDetectorComponent detector = new LiquidDetectorComponent();
+            entity.add(detector);
+        }
+
+        // Add ContactListenerComponents to all entities marked with "contact_listener" tag
+        for (Entity entity : getEntitiesByTag("contact_listener")) {
+            entity.add(new ContactListenerComponent());
+        }
     }
 
     private Entity getInventoryEntityFromPosition(int screenX, int screenY) {
