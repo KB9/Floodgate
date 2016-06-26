@@ -77,6 +77,8 @@ public class GameScreen implements Screen, InputProcessor {
 
     private Entity heldEntity;
 
+    private Array<UIButton> buttons;
+
     public GameScreen(final Floodgate game) {
         this.game = game;
 
@@ -146,6 +148,29 @@ public class GameScreen implements Screen, InputProcessor {
         cameraController.setScrollSpeed(viewport.getWorldWidth() / (float)Gdx.graphics.getWidth());
         cameraController.setZoomLimits(0.75f, 2.0f);
         cameraController.setZoomSpeed(0.005f);
+
+        buttons = new Array<UIButton>();
+        buttons.add(new UIButton(startTexture, 0, 0) {
+            @Override
+            public void onClick() {
+                this.width = startTexture.getWidth() - 20;
+                this.height = startTexture.getHeight() - 20;
+                this.x = (startTexture.getWidth() - this.width) / 2;
+                this.y = (startTexture.getHeight() - this.height) / 2;
+            }
+
+            @Override
+            public void onRelease() {
+                for (Entity entity : getEntitiesByTag("liquid_spawn")) {
+                    entity.getComponent(LiquidSpawnComponent.class).spawnOnNextUpdate = true;
+                }
+
+                this.width = startTexture.getWidth();
+                this.height = startTexture.getHeight();
+                this.x = (startTexture.getWidth() - this.width) / 2;
+                this.y = (startTexture.getHeight() - this.height) / 2;
+            }
+        });
     }
 
     @Override
@@ -174,7 +199,9 @@ public class GameScreen implements Screen, InputProcessor {
         hud.render();
 
         batch.begin();
-        batch.draw(startTexture, 0, 0, 200, 200);
+        for (UIButton button : buttons) {
+            button.draw(batch);
+        }
 
         font.draw(batch, "FPS: " + Gdx.graphics.getFramesPerSecond(), 0, Gdx.graphics.getHeight());
         font.draw(batch, "Particles: " + debugParticleSystem.getParticleCount(), 0, Gdx.graphics.getHeight() - (font.getCapHeight() + 10));
@@ -310,6 +337,8 @@ public class GameScreen implements Screen, InputProcessor {
                     placement.worldX = worldX;
                     placement.worldY = worldY;
                 }
+
+                dispatchTouchDownToButtons(screenX, Gdx.graphics.getHeight() - screenY);
             }
             break;
         }
@@ -341,6 +370,10 @@ public class GameScreen implements Screen, InputProcessor {
             heldEntity = null;
         }
 
+        if (cameraController.getPointerCount() == 0) {
+            dispatchTouchUpToButtons(screenX, Gdx.graphics.getHeight() - screenY);
+        }
+
         return true;
     }
 
@@ -355,8 +388,17 @@ public class GameScreen implements Screen, InputProcessor {
                     placement.worldY = ViewportUtils.screenToWorldY(viewportCamera, screenY);
 
                 } else {
+                    // Check if no button is pressed
+                    boolean isButtonPressed = false;
+                    for (UIButton button : buttons) {
+                        if (button.isPressed) isButtonPressed = true;
+                        break;
+                    }
+
                     // Else just move the camera
-                    cameraController.touchDragged(screenX, screenY, pointer);
+                    if (!isButtonPressed) {
+                        cameraController.touchDragged(screenX, screenY, pointer);
+                    }
                 }
             }
             break;
@@ -388,7 +430,7 @@ public class GameScreen implements Screen, InputProcessor {
         for (Entity entity : getEntitiesByTag("liquid_spawn")) {
             LiquidSpawnComponent liquidSpawn = new LiquidSpawnComponent();
             liquidSpawn.on = true;
-            liquidSpawn.spawnTimeMillis = 5000;
+            liquidSpawn.spawnTimeMillis = 0;
             entity.add(liquidSpawn);
         }
 
@@ -428,5 +470,23 @@ public class GameScreen implements Screen, InputProcessor {
             }
         }
         return null;
+    }
+
+    private void dispatchTouchDownToButtons(float x, float y) {
+        for (UIButton button : buttons) {
+            if (x >= button.x && x <= (button.x + button.width) && y >= button.y && y <= (button.y + button.height)) {
+                button.isPressed = true;
+                button.onClick();
+            }
+        }
+    }
+
+    private void dispatchTouchUpToButtons(float x, float y) {
+        for (UIButton button : buttons) {
+            if (button.isPressed) {
+                button.isPressed = false;
+                button.onRelease();
+            }
+        }
     }
 }

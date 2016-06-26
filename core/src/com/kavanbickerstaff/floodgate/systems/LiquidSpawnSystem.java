@@ -69,14 +69,21 @@ public class LiquidSpawnSystem extends IteratingSystem implements EntityListener
         DimensionsComponent dimensions = dimensionsM.get(entity);
         MainItemComponent main = mainM.get(entity);
 
-        long lastSpawnTime = spawnTrackerMap.get(main.uniqueId);
-        long currentTime = TimeUtils.millis();
-        if (currentTime - lastSpawnTime >= spawn.spawnTimeMillis) {
-            spawnTrackerMap.put(main.uniqueId, currentTime);
+        if (spawn.spawnTimeMillis > 0) {
+            long lastSpawnTime = spawnTrackerMap.get(main.uniqueId);
+            long currentTime = TimeUtils.millis();
+            if (currentTime - lastSpawnTime >= spawn.spawnTimeMillis) {
+                spawnTrackerMap.put(main.uniqueId, currentTime);
 
-            if (spawn.on) {
-                spawnLiquid(transform.x, transform.y, dimensions.width * transform.scaleX, dimensions.height * transform.scaleY);
+                if (spawn.on) {
+                    spawnLiquid(transform.x, transform.y, dimensions.width * transform.scaleX, dimensions.height * transform.scaleY);
+                }
             }
+        }
+
+        if (spawn.spawnOnNextUpdate && spawn.on) {
+            spawnLiquid(transform.x, transform.y, dimensions.width * transform.scaleX, dimensions.height * transform.scaleY);
+            spawn.spawnOnNextUpdate = false;
         }
     }
 
