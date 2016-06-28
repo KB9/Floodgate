@@ -8,6 +8,7 @@ import com.badlogic.gdx.Screen;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
+import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
@@ -112,12 +113,7 @@ public class GameScreen implements Screen, InputProcessor {
         engine.removeSystem(engine.getSystem(PhysicsSystem.class));
         engine.addSystem(new CompatibilityPhysicsSystem(world, particleSystem));
 
-        String vertexShader = Gdx.files.internal("water_shader.vert").readString();
-        String fragmentShader = Gdx.files.internal("water_shader.frag").readString();
-        engine.addSystem(new LiquidRenderSystem(viewportCamera, particleSystem,
-                new Texture(Gdx.files.internal("water_particle_alpha_64.png")),
-                new ShaderProgram(vertexShader, fragmentShader)));
-
+        engine.addSystem(new LiquidRenderSystem(viewportCamera, particleSystem));
         engine.addSystem(new InventorySystem(hud));
         engine.addSystem(new LiquidSpawnSystem());
         engine.addSystem(new LiquidDetectorSystem(world, particleSystem));
@@ -128,8 +124,6 @@ public class GameScreen implements Screen, InputProcessor {
 
         batch = new SpriteBatch();
         backgroundTexture = new Texture(Gdx.files.internal("sewer_background.png"));
-
-        startTexture = new Texture(Gdx.files.internal("start_button.png"));
 
         // FreeType font initialization
         FreeTypeFontGenerator fontGenerator = new FreeTypeFontGenerator(Gdx.files.internal("fonts/arial.ttf"));
@@ -150,6 +144,8 @@ public class GameScreen implements Screen, InputProcessor {
         cameraController.setZoomSpeed(0.005f);
 
         buttons = new Array<UIButton>();
+
+        startTexture = new Texture(Gdx.files.internal("start_button.png"));
         buttons.add(new UIButton(startTexture, 0, 0) {
             @Override
             public void onClick() {

@@ -17,6 +17,7 @@ import com.badlogic.gdx.graphics.glutils.FrameBuffer;
 import com.badlogic.gdx.graphics.glutils.ShaderProgram;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.utils.viewport.Viewport;
+import com.kavanbickerstaff.floodgate.GameScreen;
 import com.kavanbickerstaff.floodgate.ViewportUtils;
 import com.kavanbickerstaff.floodgate.components.LiquidComponent;
 import com.uwsoft.editor.renderer.physics.PhysicsBodyLoader;
@@ -33,25 +34,30 @@ public class LiquidRenderSystem extends IteratingSystem implements EntityListene
 
     private ParticleSystem particleSystem;
     private Texture particleTexture;
+
     private ShaderProgram shader;
 
-    private float BOX_TO_WORLD;
+    // Defines how downscaled the FBO should be with respect to screen size
+    private final int FBO_DIVISOR = 25;
 
     @SuppressWarnings("unchecked")
-    public LiquidRenderSystem(OrthographicCamera camera, ParticleSystem particleSystem,
-                              Texture particleTexture, ShaderProgram shader) {
+    public LiquidRenderSystem(OrthographicCamera camera, ParticleSystem particleSystem) {
         super(Family.all(LiquidComponent.class).get());
 
         this.camera = camera;
         this.particleSystem = particleSystem;
-        this.particleTexture = particleTexture;
-        this.shader = shader;
+
+        particleTexture = new Texture(Gdx.files.internal("water_particle_alpha_64.png"));
+
+        String vertexShader = Gdx.files.internal("water_shader.vert").readString();
+        String fragmentShader = Gdx.files.internal("water_shader.frag").readString();
+        shader = new ShaderProgram(vertexShader, fragmentShader);
+        Gdx.app.log("SHADER", shader.getLog());
 
         batch = new SpriteBatch();
-        fbo = new FrameBuffer(Pixmap.Format.RGB888,
-                Gdx.graphics.getWidth(), Gdx.graphics.getHeight(), false);
 
-        BOX_TO_WORLD = 1f / PhysicsBodyLoader.getScale();
+        fbo = new FrameBuffer(Pixmap.Format.RGB888,
+                Gdx.graphics.getWidth() / FBO_DIVISOR, Gdx.graphics.getHeight() / FBO_DIVISOR, false);
     }
 
     @Override
@@ -96,9 +102,10 @@ public class LiquidRenderSystem extends IteratingSystem implements EntityListene
         camera.update();
         batch.begin();
 
+        // Transform and draw the particles to the FBO batch
         for (Vector2 pos : particleSystem.getParticlePositionBuffer()) {
-            int screenX = ViewportUtils.worldToScreenX(camera, (int)(pos.x * BOX_TO_WORLD));
-            int screenY = Gdx.graphics.getHeight() - ViewportUtils.worldToScreenY(camera, (int)(pos.y * BOX_TO_WORLD));
+            int screenX = ViewportUtils.worldToScreenX(camera, (int)(pos.x * GameScreen.BOX_TO_WORLD));
+            int screenY = Gdx.graphics.getHeight() - ViewportUtils.worldToScreenY(camera, (int)(pos.y * GameScreen.BOX_TO_WORLD));
             float scaledWidth = particleTexture.getWidth() / camera.zoom;
             float scaledHeight = particleTexture.getHeight() / camera.zoom;
 
@@ -118,9 +125,18 @@ public class LiquidRenderSystem extends IteratingSystem implements EntityListene
         // Stop drawing to the FBO
         fbo.end();
 
+        // TODO: May want to look into bilinear interpolation when scaling the FBO up
+        //fbo.getColorBufferTexture().setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear);
+
+        // Set the uniforms used in Gaussian blur calculation
         batch.setShader(shader);
+        shader.setUniformf("dir", 0f, 0f);
+        shader.setUniformf("resolution", Gdx.graphics.getHeight() / (float)FBO_DIVISOR);
+        shader.setUniformf("radius", 2.5f);
+
+        // Draw the FBO to the batch
         batch.begin();
-        batch.draw(fbo.getColorBufferTexture(), 0, 0);
+        batch.draw(fbo.getColorBufferTexture(), 0, 0, Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
         batch.end();
     }
 

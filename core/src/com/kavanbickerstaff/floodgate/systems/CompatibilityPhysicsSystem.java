@@ -40,8 +40,7 @@ public class CompatibilityPhysicsSystem extends PhysicsSystem {
             while (accumulator >= TIME_STEP) {
 //                world.step(deltaTime, 10, 6,
 //                        particleSystem.calculateReasonableParticleIterations(deltaTime));
-                world.step(TIME_STEP, 10, 6,
-                        particleSystem.calculateReasonableParticleIterations(frameTime));
+                world.step(TIME_STEP, 10, 6, 1);
                 accumulator -= TIME_STEP;
             }
         }
