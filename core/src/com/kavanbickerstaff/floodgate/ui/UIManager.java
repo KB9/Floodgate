@@ -4,8 +4,6 @@ import com.badlogic.gdx.graphics.g2d.Batch;
 
 public class UIManager {
 
-    private boolean hasFocus;
-
     private UIWidget rootWidget;
 
     public UIManager() {
@@ -13,12 +11,11 @@ public class UIManager {
     }
 
     public void touchDown(int screenX, int screenY) {
-        hasFocus = rootWidget.touchDown(screenX, screenY);
+        rootWidget.touchDown(screenX, screenY);
     }
 
     public void touchUp(int screenX, int screenY) {
         rootWidget.touchUp(screenX, screenY);
-        hasFocus = false;
     }
 
     public void touchDragged(int screenX, int screenY) {
@@ -35,6 +32,6 @@ public class UIManager {
     }
 
     public boolean hasFocus() {
-        return hasFocus;
+        return UIWidget.hasGlobalFocus;
     }
 }

@@ -23,8 +23,8 @@ public class UIImage extends UIWidget {
     }
 
     @Override
-    public void draw(Batch batch) {
-        if (region != null) {
+    public void onDraw(Batch batch) {
+        if (region != null && visible) {
             switch (scaleType) {
                 case FILL: {
                     batch.draw(region, getTransformX(), getTransformY(), width, height);
@@ -43,10 +43,13 @@ public class UIImage extends UIWidget {
                 break;
             }
         }
-        super.draw(batch);
     }
 
     private float getScaleFactor(float width, float height, float realWidth, float realHeight) {
         return Math.min(width / realWidth, height / realHeight);
+    }
+
+    public void setRegion(TextureRegion region) {
+        this.region = region;
     }
 }

@@ -5,9 +5,8 @@ import com.badlogic.gdx.graphics.g2d.TextureRegion;
 
 public abstract class UIButton extends UIWidget {
 
-    protected boolean isPressed;
     protected float lastPressX, lastPressY;
-    public TextureRegion region;
+    protected TextureRegion region;
 
     public UIButton(TextureRegion region, float localX, float localY, float width, float height) {
         this.region = region;
@@ -26,33 +25,26 @@ public abstract class UIButton extends UIWidget {
     }
 
     @Override
-    public void draw(Batch batch) {
+    public void onDraw(Batch batch) {
         if (region != null && visible) {
-            if (isPressed) {
+            if (isTouched) {
                 batch.draw(region, getTransformX() + 10, getTransformY() + 10, width - 20, width - 20);
             } else {
                 batch.draw(region, getTransformX(), getTransformY(), width, height);
             }
         }
-        super.draw(batch);
     }
 
     @Override
-    protected boolean touchDown(float screenX, float screenY) {
-        isPressed = true;
+    protected void onTouchDown(float screenX, float screenY) {
         lastPressX = screenX - getTransformX();
         lastPressY = screenY - getTransformY();
         onClick();
-
-        return true;
     }
 
     @Override
-    protected boolean touchUp(float screenX, float screenY) {
-        isPressed = false;
+    protected void onTouchUp(float screenX, float screenY) {
         onRelease();
-
-        return true;
     }
 
     public abstract void onClick();

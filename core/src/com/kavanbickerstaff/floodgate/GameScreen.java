@@ -72,12 +72,10 @@ public class GameScreen implements Screen, InputProcessor {
 
     private CameraController cameraController;
 
-    private Texture startTexture;
     private BitmapFont font;
 
     private Entity heldEntity;
 
-//    private Array<com.kavanbickerstaff.floodgate.ui.UIButton> buttons;
     private UIManager uiManager;
 
     public GameScreen(final Floodgate game) {
@@ -147,7 +145,7 @@ public class GameScreen implements Screen, InputProcessor {
         uiManager = new UIManager();
         uiManager.addWidget(hud);
 
-        startTexture = new Texture(Gdx.files.internal("start_button.png"));
+        Texture startTexture = new Texture(Gdx.files.internal("start_button.png"));
         uiManager.addWidget(new UIButton(new TextureRegion(startTexture), 0, 0) {
             @Override
             public void onClick() {
@@ -319,6 +317,8 @@ public class GameScreen implements Screen, InputProcessor {
 
                             // Record which entity is currently being held
                             heldEntity = entity;
+
+                            hud.setAlpha(0.25f);
                         }
                     }
                 } else {
@@ -359,6 +359,7 @@ public class GameScreen implements Screen, InputProcessor {
             heldEntity = null;
         }
 
+        // Ensure there was only one pointer before submitting to UI manager
         if (cameraController.getPointerCount() == 0) {
             uiManager.touchUp(screenX, Gdx.graphics.getHeight() - screenY);
         }
@@ -370,6 +371,8 @@ public class GameScreen implements Screen, InputProcessor {
     public boolean touchDragged(int screenX, int screenY, int pointer) {
         switch (cameraController.getPointerCount()) {
             case 1: {
+                uiManager.touchDragged(screenX, Gdx.graphics.getHeight() - screenY);
+
                 if (heldEntity != null) {
                     // If there is an entity currently being positioned, move it to pointer position
                     PlacementComponent placement = heldEntity.getComponent(PlacementComponent.class);
@@ -435,25 +438,6 @@ public class GameScreen implements Screen, InputProcessor {
             entity.add(new ContactListenerComponent());
         }
     }
-
-//    private Entity getInventoryEntityFromPosition(int screenX, int screenY) {
-//        // Get the correct slot from the position and hence get the associated entity
-//        int entityId = hud.getItemIdFromPosition(screenX, Gdx.graphics.getHeight() - screenY);
-//        if (entityId >= 0) {
-//
-//            // Faster search if iterating on subset rather than iterating over all entities
-//            for (Entity e : engine.getSystem(InventorySystem.class).getEntities()) {
-//                MainItemComponent main = e.getComponent(MainItemComponent.class);
-//                InventoryComponent inventory = e.getComponent(InventoryComponent.class);
-//                PhysicsBodyComponent physicsBody = e.getComponent(PhysicsBodyComponent.class);
-//
-//                if (main != null && inventory != null && physicsBody != null && main.uniqueId == entityId) {
-//                    return e;
-//                }
-//            }
-//        }
-//        return null;
-//    }
 
     private Entity getEntityFromInventory(int entityId) {
         // Faster search if iterating on subset rather than iterating over all entities
