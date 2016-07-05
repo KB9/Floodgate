@@ -8,17 +8,14 @@ import com.badlogic.gdx.Screen;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
-import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
+import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator;
-import com.badlogic.gdx.graphics.glutils.ShaderProgram;
-import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.physics.box2d.Box2DDebugRenderer;
 import com.badlogic.gdx.physics.box2d.World;
 import com.badlogic.gdx.utils.Array;
-import com.badlogic.gdx.utils.IntArray;
 import com.badlogic.gdx.utils.viewport.StretchViewport;
 import com.kavanbickerstaff.floodgate.components.ContactListenerComponent;
 import com.kavanbickerstaff.floodgate.components.InventoryComponent;
@@ -32,6 +29,8 @@ import com.kavanbickerstaff.floodgate.systems.LiquidDetectorSystem;
 import com.kavanbickerstaff.floodgate.systems.LiquidRenderSystem;
 import com.kavanbickerstaff.floodgate.systems.LiquidSpawnSystem;
 import com.kavanbickerstaff.floodgate.systems.PlacementSystem;
+import com.kavanbickerstaff.floodgate.ui.UIButton;
+import com.kavanbickerstaff.floodgate.ui.UIManager;
 import com.uwsoft.editor.renderer.SceneLoader;
 import com.uwsoft.editor.renderer.components.MainItemComponent;
 import com.uwsoft.editor.renderer.components.physics.PhysicsBodyComponent;
@@ -78,7 +77,8 @@ public class GameScreen implements Screen, InputProcessor {
 
     private Entity heldEntity;
 
-    private Array<UIButton> buttons;
+//    private Array<com.kavanbickerstaff.floodgate.ui.UIButton> buttons;
+    private UIManager uiManager;
 
     public GameScreen(final Floodgate game) {
         this.game = game;
@@ -106,7 +106,8 @@ public class GameScreen implements Screen, InputProcessor {
         debugParticleSystem = particleSystem;
 
         // Create the HUD
-        hud = new HUD(new Texture(Gdx.files.internal("hud.png")), 5,
+        Texture hudBackground = new Texture(Gdx.files.internal("hud.png"));
+        hud = new HUD(new TextureRegion(hudBackground), 1,
                 Gdx.graphics.getWidth() - 200, 0, 200, Gdx.graphics.getHeight());
 
         // Inject modified PhysicsSystem to handle particles
@@ -143,16 +144,14 @@ public class GameScreen implements Screen, InputProcessor {
         cameraController.setZoomLimits(0.75f, 2.0f);
         cameraController.setZoomSpeed(0.005f);
 
-        buttons = new Array<UIButton>();
+        uiManager = new UIManager();
+        uiManager.addWidget(hud);
 
         startTexture = new Texture(Gdx.files.internal("start_button.png"));
-        buttons.add(new UIButton(startTexture, 0, 0) {
+        uiManager.addWidget(new UIButton(new TextureRegion(startTexture), 0, 0) {
             @Override
             public void onClick() {
-                this.width = startTexture.getWidth() - 20;
-                this.height = startTexture.getHeight() - 20;
-                this.x = (startTexture.getWidth() - this.width) / 2;
-                this.y = (startTexture.getHeight() - this.height) / 2;
+
             }
 
             @Override
@@ -160,11 +159,6 @@ public class GameScreen implements Screen, InputProcessor {
                 for (Entity entity : getEntitiesByTag("liquid_spawn")) {
                     entity.getComponent(LiquidSpawnComponent.class).spawnOnNextUpdate = true;
                 }
-
-                this.width = startTexture.getWidth();
-                this.height = startTexture.getHeight();
-                this.x = (startTexture.getWidth() - this.width) / 2;
-                this.y = (startTexture.getHeight() - this.height) / 2;
             }
         });
     }
@@ -192,17 +186,14 @@ public class GameScreen implements Screen, InputProcessor {
         //debugRenderer.render(world, viewportCamera.combined.cpy().scl(BOX_TO_WORLD));
         //particleDebugRenderer.render(debugParticleSystem, BOX_TO_WORLD, viewportCamera.combined.cpy().scl(BOX_TO_WORLD));
 
-        hud.render();
-
         batch.begin();
-        for (UIButton button : buttons) {
-            button.draw(batch);
-        }
+        uiManager.render(batch);
 
         font.draw(batch, "FPS: " + Gdx.graphics.getFramesPerSecond(), 0, Gdx.graphics.getHeight());
         font.draw(batch, "Particles: " + debugParticleSystem.getParticleCount(), 0, Gdx.graphics.getHeight() - (font.getCapHeight() + 10));
         font.draw(batch, "Entities: " + engine.getEntities().size(), 0, Gdx.graphics.getHeight() - (font.getCapHeight() + 10) * 2);
-        font.draw(batch, "Pointers: "  + cameraController.getPointerCount(), 0, Gdx.graphics.getHeight() - (font.getCapHeight() + 10) * 3);
+        font.draw(batch, "Zoom: " + viewportCamera.zoom, 0, Gdx.graphics.getHeight() - (font.getCapHeight() + 10) * 3);
+        font.draw(batch, "Pointers: "  + cameraController.getPointerCount() + " [" + Gdx.input.getX(0) + "," + Gdx.input.getY(0) + "]", 0, Gdx.graphics.getHeight() - (font.getCapHeight() + 10) * 4);
         batch.end();
     }
 
@@ -288,12 +279,15 @@ public class GameScreen implements Screen, InputProcessor {
 
         switch (cameraController.getPointerCount()) {
             case 1: {
+                // Dispatch the touch down to the UI manager
+                uiManager.touchDown(screenX, Gdx.graphics.getHeight() - screenY);
+
                 if (heldEntity == null) {
                     // If player pressed inside the HUD
-                    if (hud.isPointInside(screenX, screenY)) {
+                    if (hud.checkAABB(screenX, screenY) && hud.getSelectedEntityId() > 0) {
 
                         // Get entity from position in HUD
-                        Entity entity = getInventoryEntityFromPosition(screenX, screenY);
+                        Entity entity = getEntityFromInventory(hud.getSelectedEntityId());
                         if (entity != null) {
                             // Remove entity from inventory
                             entity.remove(InventoryComponent.class);
@@ -333,8 +327,6 @@ public class GameScreen implements Screen, InputProcessor {
                     placement.worldX = worldX;
                     placement.worldY = worldY;
                 }
-
-                dispatchTouchDownToButtons(screenX, Gdx.graphics.getHeight() - screenY);
             }
             break;
         }
@@ -355,7 +347,8 @@ public class GameScreen implements Screen, InputProcessor {
             placement.worldY = ViewportUtils.screenToWorldY(viewportCamera, screenY);
 
             // If it was let go inside the HUD, place it in the inventory
-            if (hud.isPointInside(screenX, screenY)) {
+            if (hud.checkAABB(screenX, screenY)) {
+                hud.resetSelectedEntityId();
                 heldEntity.remove(PlacementComponent.class);
                 heldEntity.add(new InventoryComponent());
             } else {
@@ -367,7 +360,7 @@ public class GameScreen implements Screen, InputProcessor {
         }
 
         if (cameraController.getPointerCount() == 0) {
-            dispatchTouchUpToButtons(screenX, Gdx.graphics.getHeight() - screenY);
+            uiManager.touchUp(screenX, Gdx.graphics.getHeight() - screenY);
         }
 
         return true;
@@ -384,15 +377,9 @@ public class GameScreen implements Screen, InputProcessor {
                     placement.worldY = ViewportUtils.screenToWorldY(viewportCamera, screenY);
 
                 } else {
-                    // Check if no button is pressed
-                    boolean isButtonPressed = false;
-                    for (UIButton button : buttons) {
-                        if (button.isPressed) isButtonPressed = true;
-                        break;
-                    }
-
-                    // Else just move the camera
-                    if (!isButtonPressed) {
+                    // Check if the UI manager is not handling any touches
+                    if (!uiManager.hasFocus()) {
+                        // Pan the camera
                         cameraController.touchDragged(screenX, screenY, pointer);
                     }
                 }
@@ -449,40 +436,36 @@ public class GameScreen implements Screen, InputProcessor {
         }
     }
 
-    private Entity getInventoryEntityFromPosition(int screenX, int screenY) {
-        // Get the correct slot from the position and hence get the associated entity
-        int entityId = hud.getItemIdFromPosition(screenX, Gdx.graphics.getHeight() - screenY);
-        if (entityId >= 0) {
+//    private Entity getInventoryEntityFromPosition(int screenX, int screenY) {
+//        // Get the correct slot from the position and hence get the associated entity
+//        int entityId = hud.getItemIdFromPosition(screenX, Gdx.graphics.getHeight() - screenY);
+//        if (entityId >= 0) {
+//
+//            // Faster search if iterating on subset rather than iterating over all entities
+//            for (Entity e : engine.getSystem(InventorySystem.class).getEntities()) {
+//                MainItemComponent main = e.getComponent(MainItemComponent.class);
+//                InventoryComponent inventory = e.getComponent(InventoryComponent.class);
+//                PhysicsBodyComponent physicsBody = e.getComponent(PhysicsBodyComponent.class);
+//
+//                if (main != null && inventory != null && physicsBody != null && main.uniqueId == entityId) {
+//                    return e;
+//                }
+//            }
+//        }
+//        return null;
+//    }
 
-            // Faster search if iterating on subset rather than iterating over all entities
-            for (Entity e : engine.getSystem(InventorySystem.class).getEntities()) {
-                MainItemComponent main = e.getComponent(MainItemComponent.class);
-                InventoryComponent inventory = e.getComponent(InventoryComponent.class);
-                PhysicsBodyComponent physicsBody = e.getComponent(PhysicsBodyComponent.class);
+    private Entity getEntityFromInventory(int entityId) {
+        // Faster search if iterating on subset rather than iterating over all entities
+        for (Entity e : engine.getSystem(InventorySystem.class).getEntities()) {
+            MainItemComponent main = e.getComponent(MainItemComponent.class);
+            InventoryComponent inventory = e.getComponent(InventoryComponent.class);
+            PhysicsBodyComponent physicsBody = e.getComponent(PhysicsBodyComponent.class);
 
-                if (main != null && inventory != null && physicsBody != null && main.uniqueId == entityId) {
-                    return e;
-                }
+            if (main != null && inventory != null && physicsBody != null && main.uniqueId == entityId) {
+                return e;
             }
         }
         return null;
-    }
-
-    private void dispatchTouchDownToButtons(float x, float y) {
-        for (UIButton button : buttons) {
-            if (x >= button.x && x <= (button.x + button.width) && y >= button.y && y <= (button.y + button.height)) {
-                button.isPressed = true;
-                button.onClick();
-            }
-        }
-    }
-
-    private void dispatchTouchUpToButtons(float x, float y) {
-        for (UIButton button : buttons) {
-            if (button.isPressed) {
-                button.isPressed = false;
-                button.onRelease();
-            }
-        }
     }
 }

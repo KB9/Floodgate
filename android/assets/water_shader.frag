@@ -54,18 +54,13 @@ void main() {
     // If the blurred pixel is not white enough, discard it
     if (result.r < LOWER_COLOR_CUTOFF) discard;
 
-    // Apply an alpha gradient from 0 -> MAX_ALPHA from LOWER_COLOR_CUTOFF -> UPPER_COLOR_CUTOFF
-    const float MAX_ALPHA = 0.75;
-    float alpha_gradient = ((result.r - LOWER_COLOR_CUTOFF) / (UPPER_COLOR_CUTOFF - LOWER_COLOR_CUTOFF)) * MAX_ALPHA;
-    result.a = min(alpha_gradient, MAX_ALPHA);
+    result.a = 0.75;
 
-    // Apply a blue -> black gradient from UPPER_COLOR_CUTOFF -> LOWER_COLOR_CUTOFF
-    result.b = 1.0;
-    result.b -= (MAX_ALPHA - result.a) * (1.0 / MAX_ALPHA);
-
-    // Set the unused colors to 0
-    result.r = 0.0;
-    result.g = 0.0;
+    if (result.r < UPPER_COLOR_CUTOFF) {
+        result.rgb = vec3(0.659, 0.871, 0.941);
+    } else {
+        result.rgb = vec3(0.251, 0.729, 0.890);
+    }
 
     gl_FragColor = result;
 }

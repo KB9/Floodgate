@@ -7,6 +7,7 @@ import com.badlogic.ashley.core.EntityListener;
 import com.badlogic.ashley.core.Family;
 import com.badlogic.ashley.systems.IteratingSystem;
 import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.Pixmap;
@@ -22,6 +23,7 @@ import com.kavanbickerstaff.floodgate.ViewportUtils;
 import com.kavanbickerstaff.floodgate.components.LiquidComponent;
 import com.uwsoft.editor.renderer.physics.PhysicsBodyLoader;
 
+import finnstr.libgdx.liquidfun.ParticleDebugRenderer;
 import finnstr.libgdx.liquidfun.ParticleSystem;
 
 public class LiquidRenderSystem extends IteratingSystem implements EntityListener {
@@ -117,6 +119,10 @@ public class LiquidRenderSystem extends IteratingSystem implements EntityListene
                         scaledWidth,
                         scaledHeight
                 );
+//                batch.draw(particleTexture,
+//                        screenX - (particleTexture.getWidth() / 2),
+//                        screenY - (particleTexture.getHeight() / 2)
+//                );
             }
         }
 
@@ -131,14 +137,42 @@ public class LiquidRenderSystem extends IteratingSystem implements EntityListene
         // Set the uniforms used in Gaussian blur calculation
         batch.setShader(shader);
         shader.setUniformf("dir", 0f, 0f);
-        shader.setUniformf("resolution", Gdx.graphics.getHeight() / (float)FBO_DIVISOR);
-        shader.setUniformf("radius", 2.5f);
+        shader.setUniformf("resolution", 1.0f);//Gdx.graphics.getHeight() / (float)FBO_DIVISOR);
+        shader.setUniformf("radius", 1920.0f);//2.5f);
 
         // Draw the FBO to the batch
         batch.begin();
         batch.draw(fbo.getColorBufferTexture(), 0, 0, Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
+
+//        float originX = (float)Gdx.graphics.getWidth() / 2.0f;
+//        float originY = (float)Gdx.graphics.getHeight() / 2.0f;
+//
+//        float frameWidth = (float)Gdx.graphics.getWidth() / camera.zoom;
+//        float frameHeight = (float)Gdx.graphics.getHeight() / camera.zoom;
+//        float frameX = originX - (frameWidth / 2.0f);
+//        float frameY = originY - (frameHeight / 2.0f);
+//
+//        Gdx.app.log("ZOOM", "x: " + frameX + " y: " + frameY + " w: " + frameWidth + " h: " + frameHeight + " zoom: " + camera.zoom);
+//        if (DEBUG_zoom_up) {
+//            if (camera.zoom < 2.0) {
+//                camera.zoom += 0.01;
+//            } else {
+//                DEBUG_zoom_up = false;
+//            }
+//        } else {
+//            if (camera.zoom > 0.75) {
+//                camera.zoom -= 0.01;
+//            } else {
+//                DEBUG_zoom_up = true;
+//            }
+//        }
+//
+//        batch.draw(fbo.getColorBufferTexture(), frameX, frameY, frameWidth, frameHeight);
+
         batch.end();
     }
+
+//    private boolean DEBUG_zoom_up;
 
     private boolean isParticleVisible(int screenX, int screenY, float width, float height) {
         float left = screenX - (width / 2);
