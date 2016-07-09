@@ -90,6 +90,9 @@ public class LiquidRenderSystem extends IteratingSystem implements EntityListene
 
     }
 
+    // TODO: Ensure that particles are displayed the same size regardless of the resolution.
+    // Particles look bigger on a screen with a smaller resolution.
+
     @Override
     public void update(float deltaTime) {
         if (getEntities().size() == 0) return;

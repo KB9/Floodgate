@@ -3,7 +3,7 @@ package com.kavanbickerstaff.floodgate.ui;
 import com.badlogic.gdx.graphics.g2d.Batch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 
-public class UIImage extends UIWidget {
+public class UIImage extends UI.Widget {
 
     public enum ScaleType {
         FILL,
@@ -14,12 +14,14 @@ public class UIImage extends UIWidget {
     private ScaleType scaleType;
 
     public UIImage(TextureRegion region, ScaleType scaleType, float localX, float localY, float width, float height) {
+        super(localX, localY, width, height);
+
         this.region = region;
         this.scaleType = scaleType;
-        this.localX = localX;
-        this.localY = localY;
-        this.width = width;
-        this.height = height;
+    }
+
+    public UIImage(TextureRegion region, ScaleType scaleType, float x, float y) {
+        this(region, scaleType, x, y, region.getRegionWidth(), region.getRegionHeight());
     }
 
     @Override

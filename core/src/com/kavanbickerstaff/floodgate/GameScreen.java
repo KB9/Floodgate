@@ -29,8 +29,8 @@ import com.kavanbickerstaff.floodgate.systems.LiquidDetectorSystem;
 import com.kavanbickerstaff.floodgate.systems.LiquidRenderSystem;
 import com.kavanbickerstaff.floodgate.systems.LiquidSpawnSystem;
 import com.kavanbickerstaff.floodgate.systems.PlacementSystem;
+import com.kavanbickerstaff.floodgate.ui.UI;
 import com.kavanbickerstaff.floodgate.ui.UIButton;
-import com.kavanbickerstaff.floodgate.ui.UIManager;
 import com.uwsoft.editor.renderer.SceneLoader;
 import com.uwsoft.editor.renderer.components.MainItemComponent;
 import com.uwsoft.editor.renderer.components.physics.PhysicsBodyComponent;
@@ -76,7 +76,7 @@ public class GameScreen implements Screen, InputProcessor {
 
     private Entity heldEntity;
 
-    private UIManager uiManager;
+    private UI ui;
 
     public GameScreen(final Floodgate game) {
         this.game = game;
@@ -142,11 +142,11 @@ public class GameScreen implements Screen, InputProcessor {
         cameraController.setZoomLimits(0.75f, 2.0f);
         cameraController.setZoomSpeed(0.005f);
 
-        uiManager = new UIManager();
-        uiManager.addWidget(hud);
-
+        // UI initialization and setup
+        ui = new UI();
+        ui.addWidget(hud);
         Texture startTexture = new Texture(Gdx.files.internal("start_button.png"));
-        uiManager.addWidget(new UIButton(new TextureRegion(startTexture), 0, 0) {
+        ui.addWidget(new UIButton(new TextureRegion(startTexture), 0, 0) {
             @Override
             public void onClick() {
 
@@ -185,7 +185,7 @@ public class GameScreen implements Screen, InputProcessor {
         //particleDebugRenderer.render(debugParticleSystem, BOX_TO_WORLD, viewportCamera.combined.cpy().scl(BOX_TO_WORLD));
 
         batch.begin();
-        uiManager.render(batch);
+        ui.render(batch);
 
         font.draw(batch, "FPS: " + Gdx.graphics.getFramesPerSecond(), 0, Gdx.graphics.getHeight());
         font.draw(batch, "Particles: " + debugParticleSystem.getParticleCount(), 0, Gdx.graphics.getHeight() - (font.getCapHeight() + 10));
@@ -278,7 +278,7 @@ public class GameScreen implements Screen, InputProcessor {
         switch (cameraController.getPointerCount()) {
             case 1: {
                 // Dispatch the touch down to the UI manager
-                uiManager.touchDown(screenX, Gdx.graphics.getHeight() - screenY);
+                ui.touchDown(screenX, Gdx.graphics.getHeight() - screenY);
 
                 if (heldEntity == null) {
                     // If player pressed inside the HUD
@@ -300,7 +300,7 @@ public class GameScreen implements Screen, InputProcessor {
                             // Record which entity is currently being held
                             heldEntity = entity;
 
-                            hud.setAlpha(0.25f);
+                            hud.setColor(1, 1, 1, 0.25f);
                         }
                     } else {
 
@@ -318,7 +318,7 @@ public class GameScreen implements Screen, InputProcessor {
                             // Record which entity is currently being held
                             heldEntity = entity;
 
-                            hud.setAlpha(0.25f);
+                            hud.setColor(1, 1, 1, 0.25f);
                         }
                     }
                 } else {
@@ -355,13 +355,13 @@ public class GameScreen implements Screen, InputProcessor {
                 placement.isHeld = false;
             }
 
-            hud.setAlpha(1);
+            hud.setColor(1, 1, 1, 1);
             heldEntity = null;
         }
 
         // Ensure there was only one pointer before submitting to UI manager
         if (cameraController.getPointerCount() == 0) {
-            uiManager.touchUp(screenX, Gdx.graphics.getHeight() - screenY);
+            ui.touchUp(screenX, Gdx.graphics.getHeight() - screenY);
         }
 
         return true;
@@ -371,7 +371,7 @@ public class GameScreen implements Screen, InputProcessor {
     public boolean touchDragged(int screenX, int screenY, int pointer) {
         switch (cameraController.getPointerCount()) {
             case 1: {
-                uiManager.touchDragged(screenX, Gdx.graphics.getHeight() - screenY);
+                ui.touchDragged(screenX, Gdx.graphics.getHeight() - screenY);
 
                 if (heldEntity != null) {
                     // If there is an entity currently being positioned, move it to pointer position
@@ -381,7 +381,7 @@ public class GameScreen implements Screen, InputProcessor {
 
                 } else {
                     // Check if the UI manager is not handling any touches
-                    if (!uiManager.hasFocus()) {
+                    if (!ui.hasFocus()) {
                         // Pan the camera
                         cameraController.touchDragged(screenX, screenY, pointer);
                     }

@@ -3,25 +3,19 @@ package com.kavanbickerstaff.floodgate.ui;
 import com.badlogic.gdx.graphics.g2d.Batch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 
-public abstract class UIButton extends UIWidget {
+public abstract class UIButton extends UI.Widget {
 
     protected float lastPressX, lastPressY;
     protected TextureRegion region;
 
     public UIButton(TextureRegion region, float localX, float localY, float width, float height) {
+        super(localX, localY, width, height);
+
         this.region = region;
-        this.localX = localX;
-        this.localY = localY;
-        this.width = width;
-        this.height = height;
     }
 
     public UIButton(TextureRegion region, float x, float y) {
         this(region, x, y, region.getRegionWidth(), region.getRegionHeight());
-    }
-
-    public UIButton(TextureRegion region) {
-        this(region, 0, 0, region.getRegionWidth(), region.getRegionHeight());
     }
 
     @Override

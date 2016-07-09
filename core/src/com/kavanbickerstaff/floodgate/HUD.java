@@ -2,10 +2,11 @@ package com.kavanbickerstaff.floodgate;
 
 import com.badlogic.gdx.graphics.g2d.Batch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
+import com.kavanbickerstaff.floodgate.ui.UI;
 import com.kavanbickerstaff.floodgate.ui.UIImage;
-import com.kavanbickerstaff.floodgate.ui.UIWidget;
+import com.kavanbickerstaff.floodgate.ui.UIScroller;
 
-public class HUD extends UIWidget {
+public class HUD extends UI.Widget {
 
     public static class Item {
         public int id;
@@ -14,7 +15,7 @@ public class HUD extends UIWidget {
     }
 
     private Item[] itemsArray;
-    private UIWidget[] slotsArray;
+    private UI.Widget[] slotsArray;
     private UIImage[] slotImages;
 
     private TextureRegion background;
@@ -23,45 +24,67 @@ public class HUD extends UIWidget {
     private int selectedEntityId = -1;
 
     public HUD(TextureRegion background, int slots, int localX, int localY, int width, int height) {
+        super(localX, localY, width, height);
+
         this.background = background;
-        this.localX = localX;
-        this.localY = localY;
-        this.width = width;
-        this.height = height;
 
         itemsArray = new Item[slots];
-        slotsArray = new UIWidget[slots];
+        slotsArray = new UI.Widget[slots];
         slotImages = new UIImage[slots];
 
-        int slotSize = width - 20;
-        int currentX = 10;
-        int currentY = height - slotSize - 10;
+        // Create a scroller which only scrolls if an inventory item is not selected
+        UIScroller scroller = new UIScroller(UIScroller.ScrollType.VERTICAL, 0, 0, width, height) {
+            @Override
+            protected void onTouchDragged(float screenX, float screenY) {
+                this.enabled = selectedEntityId == -1;
+                super.onTouchDragged(screenX, screenY);
+            }
+
+            @Override
+            protected void onTouchUp(float screenX, float screenY) {
+                this.enabled = true;
+                super.onTouchUp(screenX, screenY);
+            }
+
+            @Override
+            protected void onFocusLost() {
+                this.enabled = true;
+            }
+        };
+        addChild(scroller);
+
+        int slotPadding = 10;
+        int slotSize = width - (slotPadding * 2);
+        int currentX = slotPadding;
+        int currentY = height - slotSize - slotPadding;
         for (int i = 0; i < slots; i++) {
 
+            // Create a widget which sets the selected entity ID when touched down
             final int slotIndex = i;
-            UIWidget slot = new UIWidget() {
+            UI.Widget slot = new UI.Widget(currentX, currentY, slotSize, slotSize) {
                 @Override
                 protected void onTouchDown(float screenX, float screenY) {
                     Item item = itemsArray[slotIndex];
                     selectedEntityId = (item != null ? item.id : -1);
                 }
             };
-            slot.localX = currentX;
-            slot.localY = currentY;
-            slot.width = slotSize;
-            slot.height = slotSize;
             slotsArray[i] = slot;
 
+            // Create an image for slot - image can be scaled according to its physical dimensions
             UIImage slotImage = new UIImage(null, UIImage.ScaleType.FILL, 0, 0, 0, 0);
             slotImages[i] = slotImage;
 
+            // Add image to slot, add slot to scroller
             slot.addChild(slotImage);
-            this.addChild(slot);
+            scroller.addChild(slot);
 
-            currentY -= (slotSize + 10);
+            currentY -= (slotSize + slotPadding);
         }
 
-        setAlpha(1);
+        // Set the max scrolling limit of the slots
+        scroller.setVScrollBounds(-height + (slotSize + slotPadding) * slots, 0);
+
+        setColor(1, 1, 1, 1);
     }
 
     public void update(Item[] items) {
@@ -73,6 +96,7 @@ public class HUD extends UIWidget {
             if (i < items.length && items[i] != null) {
                 itemsArray[i] = items[i];
 
+                // Calculate size that slot image should be displayed at
                 float scale = slotsArray[i].width / Math.max(itemsArray[i].width, itemsArray[i].height);
                 slotImages[i].width = itemsArray[i].width * scale;
                 slotImages[i].height = itemsArray[i].height * scale;
