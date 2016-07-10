@@ -3,6 +3,7 @@ package com.kavanbickerstaff.floodgate;
 import com.badlogic.ashley.core.Engine;
 import com.badlogic.ashley.core.Entity;
 import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.Input;
 import com.badlogic.gdx.InputProcessor;
 import com.badlogic.gdx.Screen;
 import com.badlogic.gdx.graphics.Color;
@@ -18,12 +19,14 @@ import com.badlogic.gdx.physics.box2d.World;
 import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.viewport.StretchViewport;
 import com.kavanbickerstaff.floodgate.components.ContactListenerComponent;
+import com.kavanbickerstaff.floodgate.components.DrownableComponent;
 import com.kavanbickerstaff.floodgate.components.InventoryComponent;
 import com.kavanbickerstaff.floodgate.components.LiquidDetectorComponent;
 import com.kavanbickerstaff.floodgate.components.LiquidSpawnComponent;
 import com.kavanbickerstaff.floodgate.components.PlacementComponent;
 import com.kavanbickerstaff.floodgate.systems.CompatibilityPhysicsSystem;
 import com.kavanbickerstaff.floodgate.systems.ContactListenerSystem;
+import com.kavanbickerstaff.floodgate.systems.DrowningSystem;
 import com.kavanbickerstaff.floodgate.systems.InventorySystem;
 import com.kavanbickerstaff.floodgate.systems.LiquidDetectorSystem;
 import com.kavanbickerstaff.floodgate.systems.LiquidRenderSystem;
@@ -78,13 +81,13 @@ public class GameScreen implements Screen, InputProcessor {
 
     private UI ui;
 
-    public GameScreen(final Floodgate game) {
+    public GameScreen(final Floodgate game, String levelName) {
         this.game = game;
 
         // Load the scene using the specified viewport size
         viewport = new StretchViewport(800, 480);
         sceneLoader = new SceneLoader();
-        sceneLoader.loadScene("Level_1", viewport);
+        sceneLoader.loadScene(levelName, viewport);
 
         viewportCamera = (OrthographicCamera)viewport.getCamera();
 
@@ -118,6 +121,7 @@ public class GameScreen implements Screen, InputProcessor {
         engine.addSystem(new LiquidDetectorSystem(world, particleSystem));
         engine.addSystem(new PlacementSystem(world));
         engine.addSystem(new ContactListenerSystem(world));
+        engine.addSystem(new DrowningSystem());
 
         addComponentsByTags();
 
@@ -164,6 +168,7 @@ public class GameScreen implements Screen, InputProcessor {
     @Override
     public void show() {
         Gdx.input.setInputProcessor(this);
+        Gdx.input.setCatchBackKey(true);
     }
 
     @Override
@@ -255,7 +260,10 @@ public class GameScreen implements Screen, InputProcessor {
 
     @Override
     public boolean keyDown(int keycode) {
-        return false;
+        if (keycode == Input.Keys.BACK) {
+            game.setScreen(new LevelSelectorScreen(game));
+        }
+        return true;
     }
 
     @Override
@@ -436,6 +444,14 @@ public class GameScreen implements Screen, InputProcessor {
         // Add ContactListenerComponents to all entities marked with "contact_listener" tag
         for (Entity entity : getEntitiesByTag("contact_listener")) {
             entity.add(new ContactListenerComponent());
+        }
+
+        // Add DrownableComponent to all entities marker with "drownable" tag
+        for (Entity entity : getEntitiesByTag("drownable")) {
+            entity.add(new ContactListenerComponent());
+            DrownableComponent drownable = new DrownableComponent();
+            drownable.particleLimit = 10;
+            entity.add(drownable);
         }
     }
 

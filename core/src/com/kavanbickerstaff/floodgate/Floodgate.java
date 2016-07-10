@@ -6,7 +6,7 @@ public class Floodgate extends Game {
 
     @Override
     public void create() {
-        setScreen(new GameScreen(this));
+        setScreen(new LevelSelectorScreen(this));
     }
 
     @Override

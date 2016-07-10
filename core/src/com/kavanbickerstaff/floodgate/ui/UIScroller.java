@@ -26,6 +26,11 @@ public class UIScroller extends UI.Widget {
         maxY = 0;
     }
 
+    public void setScrollPos(float x, float y) {
+        scrollX = x;
+        scrollY = y;
+    }
+
     public void setHScrollBounds(float minX, float maxX) {
         this.minX = minX;
         this.maxX = maxX;

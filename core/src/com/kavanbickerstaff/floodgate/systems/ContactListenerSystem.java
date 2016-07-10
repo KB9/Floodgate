@@ -134,43 +134,55 @@ public class ContactListenerSystem extends IteratingSystem implements EntityList
 
         @Override
         public void beginContact(Contact contact) {
-            long bodyAddressA = contact.getFixtureA().getBody().getAddress();
-            if (fixtureBegins.containsKey(bodyAddressA)) {
-                fixtureBegins.get(bodyAddressA).add(contact.getFixtureA());
+            if (contact.getFixtureA() != null) {
+                long bodyAddressA = contact.getFixtureA().getBody().getAddress();
+                if (fixtureBegins.containsKey(bodyAddressA)) {
+                    fixtureBegins.get(bodyAddressA).add(contact.getFixtureA());
+                }
             }
 
-            long bodyAddressB = contact.getFixtureB().getBody().getAddress();
-            if (fixtureBegins.containsKey(bodyAddressB)) {
-                fixtureBegins.get(bodyAddressB).add(contact.getFixtureB());
+            if (contact.getFixtureB() != null) {
+                long bodyAddressB = contact.getFixtureB().getBody().getAddress();
+                if (fixtureBegins.containsKey(bodyAddressB)) {
+                    fixtureBegins.get(bodyAddressB).add(contact.getFixtureB());
+                }
             }
         }
 
         @Override
         public void endContact(Contact contact) {
-            long bodyAddressA = contact.getFixtureA().getBody().getAddress();
-            if (fixtureEnds.containsKey(bodyAddressA)) {
-                fixtureEnds.get(bodyAddressA).add(contact.getFixtureA());
+            if (contact.getFixtureA() != null) {
+                long bodyAddressA = contact.getFixtureA().getBody().getAddress();
+                if (fixtureEnds.containsKey(bodyAddressA)) {
+                    fixtureEnds.get(bodyAddressA).add(contact.getFixtureA());
+                }
             }
 
-            long bodyAddressB = contact.getFixtureB().getBody().getAddress();
-            if (fixtureEnds.containsKey(bodyAddressB)) {
-                fixtureEnds.get(bodyAddressB).add(contact.getFixtureB());
+            if (contact.getFixtureB() != null) {
+                long bodyAddressB = contact.getFixtureB().getBody().getAddress();
+                if (fixtureEnds.containsKey(bodyAddressB)) {
+                    fixtureEnds.get(bodyAddressB).add(contact.getFixtureB());
+                }
             }
         }
 
         @Override
         public void beginParticleBodyContact(ParticleSystem system, ParticleBodyContact contact) {
-            long bodyAddress = contact.getBody().getAddress();
-            if (particleBegins.containsKey(bodyAddress)) {
-                particleBegins.get(bodyAddress).add(contact.getIndex());
+            if (contact.getBody() != null) {
+                long bodyAddress = contact.getBody().getAddress();
+                if (particleBegins.containsKey(bodyAddress)) {
+                    particleBegins.get(bodyAddress).add(contact.getIndex());
+                }
             }
         }
 
         @Override
         public void endParticleBodyContact(Fixture fixture, ParticleSystem system, int index) {
-            long bodyAddress = fixture.getBody().getAddress();
-            if (particleEnds.containsKey(bodyAddress)) {
-                particleEnds.get(bodyAddress).add(index);
+            if (fixture != null) {
+                long bodyAddress = fixture.getBody().getAddress();
+                if (particleEnds.containsKey(bodyAddress)) {
+                    particleEnds.get(bodyAddress).add(index);
+                }
             }
         }
 
