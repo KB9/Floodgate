@@ -16,6 +16,7 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.graphics.glutils.FrameBuffer;
 import com.badlogic.gdx.graphics.glutils.ShaderProgram;
+import com.badlogic.gdx.math.Affine2;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.utils.viewport.Viewport;
 import com.kavanbickerstaff.floodgate.GameScreen;
@@ -39,8 +40,11 @@ public class LiquidRenderSystem extends IteratingSystem implements EntityListene
 
     private ShaderProgram shader;
 
+    // Boundaries for bounding box check against particle textures (screen dimensions)
+    private float minX, maxX, minY, maxY;
+
     // Defines how downscaled the FBO should be with respect to screen size
-    private final int FBO_DIVISOR = 25;
+    private final int FBO_DIVISOR = 5;
 
     @SuppressWarnings("unchecked")
     public LiquidRenderSystem(OrthographicCamera camera, ParticleSystem particleSystem) {
@@ -49,7 +53,7 @@ public class LiquidRenderSystem extends IteratingSystem implements EntityListene
         this.camera = camera;
         this.particleSystem = particleSystem;
 
-        particleTexture = new Texture(Gdx.files.internal("water_particle_alpha_64.png"));
+        particleTexture = new Texture(Gdx.files.internal("water_particle_alpha.png"));
 
         String vertexShader = Gdx.files.internal("water_shader.vert").readString();
         String fragmentShader = Gdx.files.internal("water_shader.frag").readString();
@@ -60,6 +64,11 @@ public class LiquidRenderSystem extends IteratingSystem implements EntityListene
 
         fbo = new FrameBuffer(Pixmap.Format.RGB888,
                 Gdx.graphics.getWidth() / FBO_DIVISOR, Gdx.graphics.getHeight() / FBO_DIVISOR, false);
+
+        minX = 0;
+        maxX = camera.viewportWidth;
+        minY = Gdx.graphics.getHeight() - camera.viewportHeight;
+        maxY = Gdx.graphics.getHeight();
     }
 
     @Override
@@ -90,9 +99,6 @@ public class LiquidRenderSystem extends IteratingSystem implements EntityListene
 
     }
 
-    // TODO: Ensure that particles are displayed the same size regardless of the resolution.
-    // Particles look bigger on a screen with a smaller resolution.
-
     @Override
     public void update(float deltaTime) {
         if (getEntities().size() == 0) return;
@@ -107,85 +113,85 @@ public class LiquidRenderSystem extends IteratingSystem implements EntityListene
         camera.update();
         batch.begin();
 
-        // Transform and draw the particles to the FBO batch
-        for (Vector2 pos : particleSystem.getParticlePositionBuffer()) {
-            int screenX = ViewportUtils.worldToScreenX(camera, (int)(pos.x * GameScreen.BOX_TO_WORLD));
-            int screenY = Gdx.graphics.getHeight() - ViewportUtils.worldToScreenY(camera, (int)(pos.y * GameScreen.BOX_TO_WORLD));
-            float scaledWidth = particleTexture.getWidth() / camera.zoom;
-            float scaledHeight = particleTexture.getHeight() / camera.zoom;
+        float viewportWidth = camera.viewportWidth;
+        float viewportHeight = camera.viewportHeight;
+        float halfViewportWidth = viewportWidth / 2f;
+        float halfViewportHeight = viewportHeight / 2f;
 
-            if (isParticleVisible(screenX, screenY,
-                    particleTexture.getWidth(), particleTexture.getHeight())) {
+        // Parameters for offsetting the particle positions according to camera position
+        float cameraOffsetX = (camera.position.x - halfViewportWidth);
+        float cameraOffsetY = (camera.position.y - halfViewportHeight);
+
+        // Parameters for bounding box check
+        float halfTexWidth = (particleTexture.getWidth() / 2f) / camera.zoom;
+        float halfTexHeight = (particleTexture.getHeight() / 2f) / camera.zoom;
+
+        // Constants for position scaling algorithm
+        float invZoomMinusOne = (1f / camera.zoom) - 1;
+        float reverseViewportHeight = Gdx.graphics.getHeight() - halfViewportHeight;
+
+        for (Vector2 pos : particleSystem.getParticlePositionBuffer()) {
+            // Convert Box2D coordinates to world coordinates
+            float worldX = pos.x * GameScreen.BOX_TO_WORLD;
+            float worldY = Gdx.graphics.getHeight() - (pos.y * GameScreen.BOX_TO_WORLD);
+
+            // Adjust screen position according to camera positioning
+            worldX -= cameraOffsetX;
+            worldY += cameraOffsetY;
+
+            /*
+            float distFromCenterX = worldX - halfViewportWidth;
+            float distFromCenterY = worldY - (Gdx.graphics.getHeight() - halfViewportHeight);
+
+            float scaledDistFromCenterX = (1f / camera.zoom) * distFromCenterX;
+            float scaledDistFromCenterY = (1f / camera.zoom) * distFromCenterY;
+
+            float drawX = worldX + (scaledDistFromCenterX - distFromCenterX);
+            float drawY = worldY + (scaledDistFromCenterY - distFromCenterY);
+            */
+
+            // Simplified position scaling calculation (expanded calculation shown above)
+            float drawX = worldX + (worldX - halfViewportWidth) * invZoomMinusOne;
+            float drawY = worldY + (worldY - reverseViewportHeight) * invZoomMinusOne;
+
+            // TODO: Should really take into account particle texture width here
+            // Bounding box check to ensure particle is inside screen bounds before drawing
+            if (isParticleVisible(drawX, drawY, halfTexWidth, halfTexHeight)) {
+
+                // This is, for some reason, required as the shader inverts the framebuffer texture
+                drawY = Gdx.graphics.getHeight() - drawY;
+
                 batch.draw(particleTexture,
-                        screenX - (scaledWidth / 2),
-                        screenY - (scaledHeight / 2),
-                        scaledWidth,
-                        scaledHeight
+                        drawX - halfTexWidth,
+                        drawY - halfTexHeight,
+                        particleTexture.getWidth() / camera.zoom,
+                        particleTexture.getHeight() / camera.zoom
                 );
-//                batch.draw(particleTexture,
-//                        screenX - (particleTexture.getWidth() / 2),
-//                        screenY - (particleTexture.getHeight() / 2)
-//                );
             }
         }
 
         batch.end();
 
-        // Stop drawing to the FBO
         fbo.end();
 
-        // TODO: May want to look into bilinear interpolation when scaling the FBO up
-        //fbo.getColorBufferTexture().setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear);
-
-        // Set the uniforms used in Gaussian blur calculation
         batch.setShader(shader);
-        shader.setUniformf("dir", 0f, 0f);
-        shader.setUniformf("resolution", 1.0f);//Gdx.graphics.getHeight() / (float)FBO_DIVISOR);
-        shader.setUniformf("radius", 1920.0f);//2.5f);
-
-        // Draw the FBO to the batch
         batch.begin();
-        batch.draw(fbo.getColorBufferTexture(), 0, 0, Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
 
-//        float originX = (float)Gdx.graphics.getWidth() / 2.0f;
-//        float originY = (float)Gdx.graphics.getHeight() / 2.0f;
-//
-//        float frameWidth = (float)Gdx.graphics.getWidth() / camera.zoom;
-//        float frameHeight = (float)Gdx.graphics.getHeight() / camera.zoom;
-//        float frameX = originX - (frameWidth / 2.0f);
-//        float frameY = originY - (frameHeight / 2.0f);
-//
-//        Gdx.app.log("ZOOM", "x: " + frameX + " y: " + frameY + " w: " + frameWidth + " h: " + frameHeight + " zoom: " + camera.zoom);
-//        if (DEBUG_zoom_up) {
-//            if (camera.zoom < 2.0) {
-//                camera.zoom += 0.01;
-//            } else {
-//                DEBUG_zoom_up = false;
-//            }
-//        } else {
-//            if (camera.zoom > 0.75) {
-//                camera.zoom -= 0.01;
-//            } else {
-//                DEBUG_zoom_up = true;
-//            }
-//        }
-//
-//        batch.draw(fbo.getColorBufferTexture(), frameX, frameY, frameWidth, frameHeight);
+        float scaleX = (Gdx.graphics.getWidth() / viewportWidth);
+        float scaleY = (Gdx.graphics.getHeight() / viewportHeight);
+        batch.getShader().setUniformf("u_size", Gdx.graphics.getWidth() * scaleX, Gdx.graphics.getHeight() * scaleY);
+
+        batch.draw(fbo.getColorBufferTexture(), 0, 0, Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
 
         batch.end();
     }
 
-//    private boolean DEBUG_zoom_up;
+    private boolean isParticleVisible(float screenX, float screenY, float halfWidth, float halfHeight) {
+        float left = screenX - halfWidth;
+        float top = screenY + halfHeight;
+        float bottom = screenY - halfHeight;
+        float right = screenX + halfWidth;
 
-    private boolean isParticleVisible(int screenX, int screenY, float width, float height) {
-        float left = screenX - (width / 2);
-        float top = screenY + (height / 2);
-        float bottom = screenY - (height / 2);
-        float right = screenX + (width / 2);
-
-        return left <= Gdx.graphics.getWidth() &&
-                top >= 0 &&
-                bottom <= Gdx.graphics.getHeight() &&
-                right >= 0;
+        return left <= maxX && right >= minX && top >= minY && bottom <= maxY;
     }
 }

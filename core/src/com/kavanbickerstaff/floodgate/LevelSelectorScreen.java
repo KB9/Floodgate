@@ -6,13 +6,13 @@ import com.badlogic.gdx.Screen;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
-import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator;
 import com.kavanbickerstaff.floodgate.ui.UI;
 import com.kavanbickerstaff.floodgate.ui.UIButton;
 import com.kavanbickerstaff.floodgate.ui.UIScroller;
+import com.kavanbickerstaff.floodgate.ui.UIText;
 
 public class LevelSelectorScreen implements Screen, InputProcessor {
 
@@ -20,11 +20,6 @@ public class LevelSelectorScreen implements Screen, InputProcessor {
     private UI ui;
 
     private Texture background;
-
-    private BitmapFont font;
-    private GlyphLayout layout;
-
-    private UIButton[] buttons;
 
     public LevelSelectorScreen(final Floodgate game) {
         batch = new SpriteBatch();
@@ -36,24 +31,23 @@ public class LevelSelectorScreen implements Screen, InputProcessor {
         FreeTypeFontGenerator fontGenerator = new FreeTypeFontGenerator(Gdx.files.internal("fonts/arial.ttf"));
         FreeTypeFontGenerator.FreeTypeFontParameter fontParameter = new FreeTypeFontGenerator.FreeTypeFontParameter();
         fontParameter.size = 50;
-        font = fontGenerator.generateFont(fontParameter);
+        BitmapFont font = fontGenerator.generateFont(fontParameter);
         fontGenerator.dispose();
 
-        layout = new GlyphLayout();
-
-        UIScroller scroller = new UIScroller(UIScroller.ScrollType.VERTICAL,
+        // Create scroller for scrolling through level selection buttons
+        final UIScroller scroller = new UIScroller(UIScroller.ScrollType.VERTICAL,
                 0, 0,
                 Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
         ui.addWidget(scroller);
 
+        // Create buttons and button numbers for selecting levels
         int buttonColumns = 5;
-        int buttonRows = 5;
-        buttons = new UIButton[buttonColumns * buttonRows];
-
+        int buttonRows = 6;
         float buttonWidth = Gdx.graphics.getWidth() / (buttonColumns + 1);
         float buttonHeight = buttonWidth;
         TextureRegion buttonTexture = new TextureRegion(
-                new Texture(Gdx.files.internal("glossy_black_circle_button.png")));
+                new Texture(Gdx.files.internal("glossy_black_circle_button.png"))
+        );
 
         for (int row = 0; row < buttonRows; row++) {
             for (int col = 0; col < buttonColumns; col++) {
@@ -63,6 +57,44 @@ public class LevelSelectorScreen implements Screen, InputProcessor {
                 float buttonY = ((buttonRows - 1) * buttonHeight) - row * buttonHeight;
 
                 UIButton button = new UIButton(buttonTexture, buttonX, buttonY, buttonWidth, buttonHeight) {
+                    private final float TOUCH_DRAG_THRESHOLD = 0.05f;
+                    private float startPercentX, startPercentY;
+                    private boolean tempDisabled;
+
+                    @Override
+                    protected void onTouchDown(float screenX, float screenY) {
+                        super.onTouchDown(screenX, screenY);
+
+                        // Get position of touch as a percentage of screen dimensions
+                        startPercentX = screenX / Gdx.graphics.getWidth();
+                        startPercentY = screenY / Gdx.graphics.getHeight();
+
+                        tempDisabled = false;
+                    }
+
+                    @Override
+                    protected void onTouchDragged(float screenX, float screenY) {
+                        if (!tempDisabled) {
+                            // Get position of touch as a percentage of screen dimensions
+                            float currentPercentX = screenX / Gdx.graphics.getWidth();
+                            float currentPercentY = screenY / Gdx.graphics.getHeight();
+
+                            // Get distance of vector between touch down and current touch position
+                            double dist = Math.sqrt(
+                                    Math.pow(currentPercentX - startPercentX, 2) + Math.pow(currentPercentY - startPercentY, 2)
+                            );
+
+                            // If distance is greater than threshold, temp disable this button
+                            if (dist > TOUCH_DRAG_THRESHOLD) {
+                                isTouched = false;
+                                tempDisabled = true;
+                            }
+                        } else {
+                            // If temp disabled, stop re-touching caused by button remaining in focus
+                            isTouched = false;
+                        }
+                    }
+
                     @Override
                     public void onClick() {
 
@@ -80,11 +112,16 @@ public class LevelSelectorScreen implements Screen, InputProcessor {
                         }
                     }
                 };
-                buttons[buttonIndex] = button;
                 scroller.addChild(button);
+
+                UIText buttonText = new UIText(font, String.valueOf(buttonIndex + 1),
+                        button.width / 2f, button.height / 2f
+                );
+                button.addChild(buttonText);
             }
         }
 
+        // Apply scrolling boundaries and set scroll position to start from the top
         scroller.setVScrollBounds(Gdx.graphics.getHeight() - (buttonRows * buttonHeight), 0);
         scroller.setScrollPos(0, Gdx.graphics.getHeight() - (buttonRows * buttonHeight));
     }
@@ -102,22 +139,7 @@ public class LevelSelectorScreen implements Screen, InputProcessor {
         batch.begin();
 
         batch.draw(background, 0, 0, Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
-
         ui.render(batch);
-        for (int i = 0; i < buttons.length; i++) {
-            String levelName = String.valueOf(i + 1);
-
-            layout.setText(font, levelName);
-            float textWidth = layout.width;
-            float textHeight = layout.height;
-
-            float textX = buttons[i].getTransformX() +
-                    (buttons[i].width - textWidth) / 2f;
-            float textY = buttons[i].getTransformY() +
-                    (buttons[i].height + textHeight) / 2f;
-
-            font.draw(batch, levelName, textX, textY);
-        }
 
         batch.end();
     }

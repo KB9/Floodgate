@@ -6,55 +6,51 @@ uniform sampler2D u_texture;
 varying vec4 v_color;
 varying vec2 v_texCoord;
 
-uniform float resolution;
-uniform float radius;
-uniform vec2 dir;
+uniform vec2 u_size;
 
 const float LOWER_COLOR_CUTOFF = 0.05;
-const float UPPER_COLOR_CUTOFF = 0.1;
+const float ALPHA_CUTOFF = 0.1;
+const float UPPER_COLOR_CUTOFF = 0.5;
 
 vec4 gaussianBlur() {
-    // RGBA sum
-    vec4 sum = vec4(0.0);
 
-    // Original texcoord for this fragment
-    vec2 tc = v_texCoord;
+    // The up/down offsets where the original image will also be drawn
+    float offset[3];
+    offset[0] = 0.0;
+    offset[1] = 1.3846153846;
+    offset[2] = 3.2307692308;
 
-    // The amount to blur, i.e. how far off center to sample from
-    // 1.0 -> blur by one pixel
-    // 2.0 -> blur by two pixels, etc
-    float blur = radius / resolution;
+    float weight[3];
+    weight[0] = 0.2270270270;
+    weight[1] = 0.3162162162;
+    weight[2] = 0.0702702703;
 
-    // The direction of the blur
-    // (1.0, 0.0) -> x-axis blur
-    // (0.0, 1.0) -> y-axis blur
-    float hStep = dir.x;
-    float vStep = dir.y;
+    vec2 currentCoord = vec2(gl_FragCoord);
 
-    // Apply blurring, using a 9-tap filter with predefined Gaussian weights
-    sum += texture2D(u_texture, vec2(tc.x - 4.0*blur*hStep, tc.y - 4.0*blur*vStep)) * 0.0162162162;
-    sum += texture2D(u_texture, vec2(tc.x - 3.0*blur*hStep, tc.y - 3.0*blur*vStep)) * 0.0540540541;
-    sum += texture2D(u_texture, vec2(tc.x - 2.0*blur*hStep, tc.y - 2.0*blur*vStep)) * 0.1216216216;
-    sum += texture2D(u_texture, vec2(tc.x - 1.0*blur*hStep, tc.y - 1.0*blur*vStep)) * 0.1945945946;
+    vec4 fragmentColor = texture2D(u_texture, currentCoord / u_size) * weight[0];
+    for (int i = 1; i < 3; i++) {
+       fragmentColor +=
+           texture2D(u_texture, (currentCoord+vec2(0.0, offset[i])) / u_size) * weight[i];
+       fragmentColor +=
+           texture2D(u_texture, (currentCoord-vec2(0.0, offset[i])) / u_size) * weight[i];
+    }
 
-    sum += texture2D(u_texture, vec2(tc.x, tc.y)) * 0.2270270270;
-
-    sum += texture2D(u_texture, vec2(tc.x + 1.0*blur*hStep, tc.y + 1.0*blur*vStep)) * 0.1945945946;
-    sum += texture2D(u_texture, vec2(tc.x + 2.0*blur*hStep, tc.y + 2.0*blur*vStep)) * 0.1216216216;
-    sum += texture2D(u_texture, vec2(tc.x + 3.0*blur*hStep, tc.y + 3.0*blur*vStep)) * 0.0540540541;
-    sum += texture2D(u_texture, vec2(tc.x + 4.0*blur*hStep, tc.y + 4.0*blur*vStep)) * 0.0162162162;
-
-    return sum;
+    return fragmentColor;
 }
 
 void main() {
+
     // Apply a Gaussian blur to the FBO texture
     vec4 result = gaussianBlur();
 
     // If the blurred pixel is not white enough, discard it
     if (result.r < LOWER_COLOR_CUTOFF) discard;
 
-    result.a = 0.75;
+    if (result.r < ALPHA_CUTOFF) {
+        result.a = (result.r / ALPHA_CUTOFF) * 0.75;
+    } else {
+        result.a = 0.75;
+    }
 
     if (result.r < UPPER_COLOR_CUTOFF) {
         result.rgb = vec3(0.659, 0.871, 0.941);
