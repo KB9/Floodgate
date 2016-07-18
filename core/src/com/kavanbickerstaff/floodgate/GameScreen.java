@@ -117,7 +117,7 @@ public class GameScreen implements Screen, InputProcessor {
 
         engine.addSystem(new LiquidRenderSystem(viewportCamera, particleSystem));
         engine.addSystem(new InventorySystem(hud));
-        engine.addSystem(new LiquidSpawnSystem());
+        engine.addSystem(new LiquidSpawnSystem(particleSystem, world.getGravity().x, world.getGravity().y));
         engine.addSystem(new LiquidDetectorSystem(world, particleSystem));
         engine.addSystem(new PlacementSystem(world));
         engine.addSystem(new ContactListenerSystem(world));
@@ -159,7 +159,8 @@ public class GameScreen implements Screen, InputProcessor {
             @Override
             public void onRelease() {
                 for (Entity entity : getEntitiesByTag("liquid_spawn")) {
-                    entity.getComponent(LiquidSpawnComponent.class).spawnOnNextUpdate = true;
+                    entity.getComponent(LiquidSpawnComponent.class).spawnVelocityY = -10f;
+                    entity.getComponent(LiquidSpawnComponent.class).spawnContinuous = true;
                 }
             }
         });

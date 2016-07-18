@@ -12,6 +12,7 @@ const float LOWER_COLOR_CUTOFF = 0.05;
 const float ALPHA_CUTOFF = 0.1;
 const float UPPER_COLOR_CUTOFF = 0.5;
 
+// Credit: http://rastergrid.com/blog/2010/09/efficient-gaussian-blur-with-linear-sampling/
 vec4 gaussianBlur() {
 
     // The up/down offsets where the original image will also be drawn

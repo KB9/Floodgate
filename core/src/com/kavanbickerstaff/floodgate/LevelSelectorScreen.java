@@ -18,10 +18,13 @@ public class LevelSelectorScreen implements Screen, InputProcessor {
 
     private SpriteBatch batch;
     private UI ui;
-
     private Texture background;
 
+    private Floodgate game;
+
     public LevelSelectorScreen(final Floodgate game) {
+        this.game = game;
+
         batch = new SpriteBatch();
         ui = new UI();
 
@@ -49,6 +52,7 @@ public class LevelSelectorScreen implements Screen, InputProcessor {
                 new Texture(Gdx.files.internal("glossy_black_circle_button.png"))
         );
 
+        // Loop through all rows/columns and put buttons/text in each
         for (int row = 0; row < buttonRows; row++) {
             for (int col = 0; col < buttonColumns; col++) {
                 final int buttonIndex = (row * buttonColumns) + col;
@@ -56,65 +60,14 @@ public class LevelSelectorScreen implements Screen, InputProcessor {
                 float buttonX = (buttonWidth / 2f) + (col * buttonWidth);
                 float buttonY = ((buttonRows - 1) * buttonHeight) - row * buttonHeight;
 
-                UIButton button = new UIButton(buttonTexture, buttonX, buttonY, buttonWidth, buttonHeight) {
-                    private final float TOUCH_DRAG_THRESHOLD = 0.05f;
-                    private float startPercentX, startPercentY;
-                    private boolean tempDisabled;
-
-                    @Override
-                    protected void onTouchDown(float screenX, float screenY) {
-                        super.onTouchDown(screenX, screenY);
-
-                        // Get position of touch as a percentage of screen dimensions
-                        startPercentX = screenX / Gdx.graphics.getWidth();
-                        startPercentY = screenY / Gdx.graphics.getHeight();
-
-                        tempDisabled = false;
-                    }
-
-                    @Override
-                    protected void onTouchDragged(float screenX, float screenY) {
-                        if (!tempDisabled) {
-                            // Get position of touch as a percentage of screen dimensions
-                            float currentPercentX = screenX / Gdx.graphics.getWidth();
-                            float currentPercentY = screenY / Gdx.graphics.getHeight();
-
-                            // Get distance of vector between touch down and current touch position
-                            double dist = Math.sqrt(
-                                    Math.pow(currentPercentX - startPercentX, 2) + Math.pow(currentPercentY - startPercentY, 2)
-                            );
-
-                            // If distance is greater than threshold, temp disable this button
-                            if (dist > TOUCH_DRAG_THRESHOLD) {
-                                isTouched = false;
-                                tempDisabled = true;
-                            }
-                        } else {
-                            // If temp disabled, stop re-touching caused by button remaining in focus
-                            isTouched = false;
-                        }
-                    }
-
-                    @Override
-                    public void onClick() {
-
-                    }
-
-                    @Override
-                    public void onRelease() {
-                        int levelIndex = buttonIndex + 1;
-                        String levelName = "Level_" + levelIndex;
-
-                        if (doesLevelExist(levelName)) {
-                            game.setScreen(new GameScreen(game, levelName));
-                        } else {
-                            Gdx.app.log("LevelSelector", "\"" + levelName + "\" does not exist!");
-                        }
-                    }
-                };
+                LevelSelectorButton button = new LevelSelectorButton(
+                        "Level_" + (buttonIndex + 1),
+                        buttonTexture, buttonX, buttonY, buttonWidth, buttonHeight
+                );
                 scroller.addChild(button);
 
-                UIText buttonText = new UIText(font, String.valueOf(buttonIndex + 1),
+                UIText buttonText = new UIText(
+                        font, String.valueOf(buttonIndex + 1),
                         button.width / 2f, button.height / 2f
                 );
                 button.addChild(buttonText);
@@ -214,5 +167,69 @@ public class LevelSelectorScreen implements Screen, InputProcessor {
     @Override
     public boolean scrolled(int amount) {
         return false;
+    }
+
+    private class LevelSelectorButton extends UIButton {
+
+        private final float TOUCH_DRAG_THRESHOLD = 0.05f;
+        private float startPercentX, startPercentY;
+        private boolean tempDisabled;
+
+        private String levelName;
+
+        public LevelSelectorButton(String levelName, TextureRegion region,
+                                   float localX, float localY, float width, float height) {
+            super(region, localX, localY, width, height);
+
+            this.levelName = levelName;
+        }
+
+        @Override
+        protected void onTouchDown(float screenX, float screenY) {
+            super.onTouchDown(screenX, screenY);
+
+            // Get position of touch as a percentage of screen dimensions
+            startPercentX = screenX / Gdx.graphics.getWidth();
+            startPercentY = screenY / Gdx.graphics.getHeight();
+
+            tempDisabled = false;
+        }
+
+        @Override
+        protected void onTouchDragged(float screenX, float screenY) {
+            if (!tempDisabled) {
+                // Get position of touch as a percentage of screen dimensions
+                float currentPercentX = screenX / Gdx.graphics.getWidth();
+                float currentPercentY = screenY / Gdx.graphics.getHeight();
+
+                // Get distance of vector between touch down and current touch position
+                double dist = Math.sqrt(
+                        Math.pow(currentPercentX - startPercentX, 2) + Math.pow(currentPercentY - startPercentY, 2)
+                );
+
+                // If distance is greater than threshold, temp disable this button
+                if (dist > TOUCH_DRAG_THRESHOLD) {
+                    isTouched = false;
+                    tempDisabled = true;
+                }
+            } else {
+                // If temp disabled, stop re-touching caused by button remaining in focus
+                isTouched = false;
+            }
+        }
+
+        @Override
+        public void onClick() {
+
+        }
+
+        @Override
+        public void onRelease() {
+            if (doesLevelExist(levelName)) {
+                game.setScreen(new GameScreen(game, levelName));
+            } else {
+                Gdx.app.log("LevelSelector", "\"" + levelName + "\" does not exist!");
+            }
+        }
     }
 }

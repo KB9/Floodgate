@@ -1,35 +1,23 @@
 package com.kavanbickerstaff.floodgate.systems;
 
-import com.badlogic.ashley.core.ComponentMapper;
-import com.badlogic.ashley.core.Engine;
 import com.badlogic.ashley.core.Entity;
-import com.badlogic.ashley.core.EntityListener;
 import com.badlogic.ashley.core.Family;
 import com.badlogic.ashley.systems.IteratingSystem;
 import com.badlogic.gdx.Gdx;
-import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
-import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.graphics.glutils.FrameBuffer;
 import com.badlogic.gdx.graphics.glutils.ShaderProgram;
-import com.badlogic.gdx.math.Affine2;
 import com.badlogic.gdx.math.Vector2;
-import com.badlogic.gdx.utils.viewport.Viewport;
 import com.kavanbickerstaff.floodgate.GameScreen;
-import com.kavanbickerstaff.floodgate.ViewportUtils;
 import com.kavanbickerstaff.floodgate.components.LiquidComponent;
-import com.uwsoft.editor.renderer.physics.PhysicsBodyLoader;
 
-import finnstr.libgdx.liquidfun.ParticleDebugRenderer;
 import finnstr.libgdx.liquidfun.ParticleSystem;
 
-public class LiquidRenderSystem extends IteratingSystem implements EntityListener {
-
-    private ComponentMapper<LiquidComponent> liquidM = ComponentMapper.getFor(LiquidComponent.class);
+public class LiquidRenderSystem extends IteratingSystem {
 
     private SpriteBatch batch;
     private FrameBuffer fbo;
@@ -69,29 +57,6 @@ public class LiquidRenderSystem extends IteratingSystem implements EntityListene
         maxX = camera.viewportWidth;
         minY = Gdx.graphics.getHeight() - camera.viewportHeight;
         maxY = Gdx.graphics.getHeight();
-    }
-
-    @Override
-    public void addedToEngine(Engine engine) {
-        super.addedToEngine(engine);
-        engine.addEntityListener(getFamily(), this);
-    }
-
-    @Override
-    public void entityAdded(Entity entity) {
-        LiquidComponent liquid = liquidM.get(entity);
-        if (liquid.isGroup) {
-            particleSystem.createParticleGroup(liquid.particleGroupDef);
-            liquid.particleGroupDef.shape.dispose();
-        } else {
-            particleSystem.createParticle(liquid.particleDef);
-            // TODO: Dispose of the particle shape
-        }
-    }
-
-    @Override
-    public void entityRemoved(Entity entity) {
-
     }
 
     @Override
