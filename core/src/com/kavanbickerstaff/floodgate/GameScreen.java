@@ -159,7 +159,8 @@ public class GameScreen implements Screen, InputProcessor {
             @Override
             public void onRelease() {
                 for (Entity entity : getEntitiesByTag("liquid_spawn")) {
-                    entity.getComponent(LiquidSpawnComponent.class).spawnVelocityY = -10f;
+                    entity.getComponent(LiquidSpawnComponent.class).isFinite = true;
+                    entity.getComponent(LiquidSpawnComponent.class).spawnCount += 20;
                     entity.getComponent(LiquidSpawnComponent.class).spawnContinuous = true;
                 }
             }
@@ -425,7 +426,6 @@ public class GameScreen implements Screen, InputProcessor {
         for (Entity entity : getEntitiesByTag("liquid_spawn")) {
             LiquidSpawnComponent liquidSpawn = new LiquidSpawnComponent();
             liquidSpawn.on = true;
-            liquidSpawn.spawnTimeMillis = 0;
             entity.add(liquidSpawn);
         }
 
