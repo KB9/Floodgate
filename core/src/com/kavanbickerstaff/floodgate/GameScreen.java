@@ -17,6 +17,7 @@ import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator;
 import com.badlogic.gdx.physics.box2d.Box2DDebugRenderer;
 import com.badlogic.gdx.physics.box2d.World;
 import com.badlogic.gdx.utils.Array;
+import com.badlogic.gdx.utils.Timer;
 import com.badlogic.gdx.utils.viewport.StretchViewport;
 import com.kavanbickerstaff.floodgate.components.ContactListenerComponent;
 import com.kavanbickerstaff.floodgate.components.DrownableComponent;
@@ -29,8 +30,10 @@ import com.kavanbickerstaff.floodgate.systems.ContactListenerSystem;
 import com.kavanbickerstaff.floodgate.systems.DrowningSystem;
 import com.kavanbickerstaff.floodgate.systems.InventorySystem;
 import com.kavanbickerstaff.floodgate.systems.LiquidDetectorSystem;
+import com.kavanbickerstaff.floodgate.systems.LiquidComponentCleanupSystem;
 import com.kavanbickerstaff.floodgate.systems.LiquidRenderSystem;
 import com.kavanbickerstaff.floodgate.systems.LiquidSpawnSystem;
+import com.kavanbickerstaff.floodgate.systems.LiquidVelocityMeasureSystem;
 import com.kavanbickerstaff.floodgate.systems.PlacementSystem;
 import com.kavanbickerstaff.floodgate.ui.UI;
 import com.kavanbickerstaff.floodgate.ui.UIButton;
@@ -81,6 +84,11 @@ public class GameScreen implements Screen, InputProcessor {
 
     private UI ui;
 
+    private Timer levelEndTimer;
+    private String levelStatus;
+
+    private boolean debugMode;
+
     public GameScreen(final Floodgate game, String levelName) {
         this.game = game;
 
@@ -108,7 +116,7 @@ public class GameScreen implements Screen, InputProcessor {
 
         // Create the HUD
         Texture hudBackground = new Texture(Gdx.files.internal("hud.png"));
-        hud = new HUD(new TextureRegion(hudBackground), 1,
+        hud = new HUD(new TextureRegion(hudBackground), 2,
                 Gdx.graphics.getWidth() - 200, 0, 200, Gdx.graphics.getHeight());
 
         // Inject modified PhysicsSystem to handle particles
@@ -122,6 +130,8 @@ public class GameScreen implements Screen, InputProcessor {
         engine.addSystem(new PlacementSystem(world));
         engine.addSystem(new ContactListenerSystem(world));
         engine.addSystem(new DrowningSystem());
+        engine.addSystem(new LiquidVelocityMeasureSystem());
+        engine.addSystem(new LiquidComponentCleanupSystem());
 
         addComponentsByTags();
 
@@ -149,8 +159,8 @@ public class GameScreen implements Screen, InputProcessor {
         // UI initialization and setup
         ui = new UI();
         ui.addWidget(hud);
-        Texture startTexture = new Texture(Gdx.files.internal("start_button.png"));
-        ui.addWidget(new UIButton(new TextureRegion(startTexture), 0, 0) {
+        Texture startTexture = new Texture(Gdx.files.internal("glossy_black_circle_button.png"));
+        ui.addWidget(new UIButton(new TextureRegion(startTexture), 0, 0, 150, 150) {
             @Override
             public void onClick() {
 
@@ -165,6 +175,21 @@ public class GameScreen implements Screen, InputProcessor {
                 }
             }
         });
+        ui.addWidget(new UIButton(new TextureRegion(startTexture), 150, 0, 150, 150) {
+            @Override
+            public void onClick() {
+
+            }
+
+            @Override
+            public void onRelease() {
+                debugMode = !debugMode;
+            }
+        });
+
+        levelEndTimer = new Timer();
+        levelEndTimer.start();
+        levelStatus = "In progress";
     }
 
     @Override
@@ -186,20 +211,67 @@ public class GameScreen implements Screen, InputProcessor {
         // Update all systems
         engine.update(Gdx.graphics.getDeltaTime());
 
-        // Viewport camera is modified by Overlap2D renderer, so update it again for debug rendering
-        //viewportCamera.update();
-        //debugRenderer.render(world, viewportCamera.combined.cpy().scl(BOX_TO_WORLD));
-        //particleDebugRenderer.render(debugParticleSystem, BOX_TO_WORLD, viewportCamera.combined.cpy().scl(BOX_TO_WORLD));
-
         batch.begin();
         ui.render(batch);
-
-        font.draw(batch, "FPS: " + Gdx.graphics.getFramesPerSecond(), 0, Gdx.graphics.getHeight());
-        font.draw(batch, "Particles: " + debugParticleSystem.getParticleCount(), 0, Gdx.graphics.getHeight() - (font.getCapHeight() + 10));
-        font.draw(batch, "Entities: " + engine.getEntities().size(), 0, Gdx.graphics.getHeight() - (font.getCapHeight() + 10) * 2);
-        font.draw(batch, "Zoom: " + viewportCamera.zoom, 0, Gdx.graphics.getHeight() - (font.getCapHeight() + 10) * 3);
-        font.draw(batch, "Pointers: "  + cameraController.getPointerCount() + " [" + Gdx.input.getX(0) + "," + Gdx.input.getY(0) + "]", 0, Gdx.graphics.getHeight() - (font.getCapHeight() + 10) * 4);
         batch.end();
+
+        float avgVel = engine.getSystem(LiquidVelocityMeasureSystem.class).averageVelocity.len2();
+        float avgVelThreshold = 1f * WORLD_TO_BOX;
+
+        // If the particles are below threshold velocity, set the timer.
+        // If the particles exceed threshold velocity, timer is reset.
+        if (avgVel < avgVelThreshold) {
+            // Wait for the particles to be still for 5 seconds before determining level outcome.
+            levelEndTimer.scheduleTask(new Timer.Task() {
+                @Override
+                public void run() {
+                    for (Entity entity : getEntitiesByTag("drownable")) {
+                        DrownableComponent drownable = entity.getComponent(DrownableComponent.class);
+                        if (drownable.hasDrowned) {
+                            levelStatus = "Failed";
+                        }
+                    }
+
+                    if (!levelStatus.equals("Failed")) {
+                        levelStatus = "Complete";
+                    }
+                }
+            },
+            5);
+        } else {
+            levelEndTimer.clear();
+        }
+
+        // DEBUG INFO
+        if (debugMode) {
+            batch.begin();
+
+            // Viewport camera is modified by Overlap2D renderer, so update it again for debug rendering
+            viewportCamera.update();
+            debugRenderer.render(world, viewportCamera.combined.cpy().scl(BOX_TO_WORLD));
+            particleDebugRenderer.render(debugParticleSystem, BOX_TO_WORLD, viewportCamera.combined.cpy().scl(BOX_TO_WORLD));
+
+            batch.end();
+            batch.begin();
+
+            font.draw(batch, "FPS: " + Gdx.graphics.getFramesPerSecond(), 0, Gdx.graphics.getHeight() - (font.getCapHeight() + 10) * 0);
+            font.draw(batch, "Particles: " + debugParticleSystem.getParticleCount() + " (Groups: " + engine.getSystem(LiquidVelocityMeasureSystem.class).getEntities().size() + ")", 0, Gdx.graphics.getHeight() - (font.getCapHeight() + 10) * 1);
+            font.draw(batch, "Entities: " + engine.getEntities().size(), 0, Gdx.graphics.getHeight() - (font.getCapHeight() + 10) * 2);
+            font.draw(batch, "Zoom: " + viewportCamera.zoom, 0, Gdx.graphics.getHeight() - (font.getCapHeight() + 10) * 3);
+            font.draw(batch, "Pointers: "  + cameraController.getPointerCount() + " [" + Gdx.input.getX(0) + "," + Gdx.input.getY(0) + "]", 0, Gdx.graphics.getHeight() - (font.getCapHeight() + 10) * 4);
+
+            if (avgVel < avgVelThreshold) font.setColor(0, 1, 0, 1); else font.setColor(1, 0, 0, 1);
+            font.draw(batch, "Avg. velocity: " + avgVel, 0, Gdx.graphics.getHeight() - (font.getCapHeight() + 10) * 5);
+
+            if (levelStatus.equals("Complete")) font.setColor(0, 1, 0, 1);
+            if (levelStatus.equals("Failed")) font.setColor(1, 0, 0, 1);
+            if (levelStatus.equals("In progress")) font.setColor(1, 1, 0, 1);
+            font.draw(batch, "Status: " + levelStatus, 0, Gdx.graphics.getHeight() - (font.getCapHeight() + 10) * 6);
+
+            font.setColor(1, 1, 1, 1);
+
+            batch.end();
+        }
     }
 
     @Override

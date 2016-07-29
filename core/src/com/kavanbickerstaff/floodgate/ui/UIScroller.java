@@ -1,5 +1,7 @@
 package com.kavanbickerstaff.floodgate.ui;
 
+import com.badlogic.gdx.math.MathUtils;
+
 public class UIScroller extends UI.Widget {
 
     public enum ScrollType {
@@ -52,19 +54,13 @@ public class UIScroller extends UI.Widget {
         float deltaX = screenX - lastX;
         float deltaY = screenY - lastY;
 
-        // Apply scroll boundaries
-        if (scrollX + deltaX < minX) deltaX = 0;
-        if (scrollX + deltaX > maxX) deltaX = 0;
-        if (scrollY + deltaY < minY) deltaY = 0;
-        if (scrollY + deltaY > maxY) deltaY = 0;
-
         // Apply scroll direction
         if (scrollType == ScrollType.VERTICAL) deltaX = 0;
         if (scrollType == ScrollType.HORIZONTAL) deltaY = 0;
 
-        // Apply scroll deltas to scroll positions
-        scrollX += deltaX;
-        scrollY += deltaY;
+        // Apply scroll deltas to scroll positions (with clamping)
+        scrollX = MathUtils.clamp(scrollX + deltaX, minX, maxX);
+        scrollY = MathUtils.clamp(scrollY + deltaY, minY, maxY);
 
         lastX = screenX;
         lastY = screenY;
